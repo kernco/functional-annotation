@@ -1,0 +1,7 @@
+ASSEMBLY                = genome.fa
+ANNOTATION              = annotation.gtf
+GENOME_SIZE             = 2.808e9
+BROAD_PEAKS_WITH_INPUT  = H3K27me3
+NARROW_PEAKS_WITH_INPUT = H3K4me3
+BROAD_PEAKS_NO_INPUT    = DNase
+
