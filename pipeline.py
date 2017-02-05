@@ -2,15 +2,16 @@ import subprocess
 import sys
 import os
 import shlex
+import json
 
 
 class Task:
-    def __init__(self, command, infile=None, outfile=None, infiles=None, outfiles=None):
+    def __init__(self, command, infile=None, outfile=None, dependencies=None, products=None):
         self.command = command
         self.infile = infile
         self.outfile = outfile
-        self.infiles = infiles
-        self.outfiles = outfiles
+        self.dependencies = dependencies
+        self.products = products
 
     def __str__(self):
         rstr = self.command
@@ -25,11 +26,11 @@ class Task:
         return rstr
 
     def outdated(self):
-        if not self.infiles or not self.outfiles:
+        if not self.dependencies or not self.products:
             return True # Always run if files not specified
-        intime = max([os.path.getmtime(filename) for filename in self.infiles])
+        intime = max([os.path.getmtime(filename) for filename in self.dependencies])
         try:
-            outtime = min([os.path.getmtime(filename) for filename in self.outfiles])
+            outtime = min([os.path.getmtime(filename) for filename in self.products])
         except OSError:
             return True #An output file doesn't exist
         return intime > outtime #At least one input file is newer than at least one output file
@@ -50,9 +51,10 @@ class Task:
 
 
 class Pipeline:
-    def __init__(self, name):
-        self.name = name
-        self.commands = []
+    def __init__(self, jsonstr):
+        pipeline = json.loads(jsonstr)
+        self.name = pipeline["name"]
+        self.commands = [task["command"] for task in pipeline["tasks"]]
 
     def add_step(self, command):
         self.commands.append(command)
@@ -96,13 +98,7 @@ class Pipeline:
             proc.wait()
 
 
-map_reads = Pipeline("Map Reads")
-map_reads.add_step("trim_galore Samples/{sample}/raw_reads.fq.gz -o Samples/{sample}")
-map_reads.add_step("bwa aln -t {threads} {assembly} Samples/{sample}/raw_reads_trimmed.fq.gz > Samples/{sample}/bwa_aln.sai")
-map_reads.add_step("bwa samse {assembly} Samples/{sample}/bwa_aln.sai Samples/{sample}/raw_reads_trimmed.fq.gz | samtools view -bS - > Samples/{sample}/bwa_aln.bam")
-map_reads.add_step("samtools view -F 1804 -q 30 -b Samples/{sample}/bwa_aln.bam > Samples/{sample}/filter1.bam")
-map_reads.add_step("samtools sort -@ {threads} -o Samples/{sample}/sorted.bam Samples/{sample}/filter1.bam")
-map_reads.add_step("picard-tools MarkDuplicates INPUT=Samples/{sample}/sorted.bam OUTPUT=Samples/{sample}/dup_marked.bam METRICS_FILE=Samples/{sample}/dup_metrics.txt VALIDATION_STRINGENCY=LENIENT ASSUME_SORTED=true REMOVE_DUPLICATES=false")
-map_reads.add_step("samtools view -F 1804 -q 30 -b Samples/{sample}/dup_marked.bam > Samples/{sample}/filter2.bam")
-map_reads.run({'sample': sys.argv[1], 'threads': 2, 'assembly': sys.argv[2]})
+with open(sys.argv[1]) as f:
+    map_reads = Pipeline(f.read())
+map_reads.run({'sample': sys.argv[2], 'threads': 2, 'assembly': sys.argv[3]})
 
