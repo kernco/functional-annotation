@@ -3,6 +3,7 @@ import sys
 import os
 import shlex
 import json
+import re
 
 
 class Task:
@@ -44,8 +45,6 @@ class Task:
             stdin = open(self.infile, 'r')
         if self.outfile and self.outfile != subprocess.PIPE:
             stdout = open(self.outfile, 'wb')
-        #print self.command.format(**params), stdin, stdout
-
         self.process = subprocess.Popen(shlex.split(self.command), stdin=stdin, stdout=stdout)
         return self.process
 
@@ -78,6 +77,18 @@ class Pipeline:
             outfile = None
         return command.strip(), infile, outfile
 
+    def setup(self):
+        parameters = set()
+        for command in self.commands:
+            parameters.update(re.findall(r"{(.*?)}", command))
+        with open("config.txt", "w") as outfile:
+            outfile.write("{\n")
+            paramlist = list(parameters)
+            for parameter in paramlist[:-1]:
+                outfile.write('\t"{}": "",\n'.format(parameter))
+            outfile.write('\t"{}": ""\n'.format(paramlist[-1]))
+            outfile.write("}\n")
+
     def run(self, params):
         for command in self.commands:
             tasks = []
@@ -98,7 +109,15 @@ class Pipeline:
             proc.wait()
 
 
-with open(sys.argv[1]) as f:
-    map_reads = Pipeline(f.read())
-map_reads.run({'sample': sys.argv[2], 'threads': 2, 'assembly': sys.argv[3]})
+if __name__ == "__main__":
+    with open(sys.argv[2]) as f:
+        pipeline = Pipeline(f.read())
+    if sys.argv[1] == "Setup":
+        pipeline.setup()
+        print "Pipeline configuration created"
+        print "Edit config.txt to specify pipeline parameters"
+    elif sys.argv[1] == "Run":
+        with open("config.txt") as f:
+            parameters = json.loads(f.read())
+        pipeline.run(parameters)
 
