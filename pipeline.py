@@ -54,6 +54,7 @@ class Pipeline:
         pipeline = json.loads(jsonstr)
         self.name = pipeline["name"]
         self.commands = [task["command"] for task in pipeline["tasks"]]
+        self.tasks = []
 
     def add_step(self, command):
         self.commands.append(command)
@@ -89,24 +90,35 @@ class Pipeline:
             outfile.write('\t"{}": ""\n'.format(paramlist[-1]))
             outfile.write("}\n")
 
-    def run(self, params):
+    def load_parameters(self, configfile):
+        with open(configfile) as f:
+            self.parameters = json.loads(f.read())
+
+    def initialize(self):
+        self.tasks = []
         for command in self.commands:
-            tasks = []
-            command = command.format(**params)
-            print command
+            command = command.format(**self.parameters)
             commands = command.split('|')
             command, infile, outfile = self._parse_command(commands[0])
-            tasks.append(Task(command, infile=infile, outfile=outfile))
+            self.tasks.append(Task(command, infile=infile, outfile=outfile))
             if len(commands) > 1:
-                tasks[0].outfile = subprocess.PIPE
+                self.tasks[-1].outfile = subprocess.PIPE
                 for command, infile, outfile in [self._parse_command(x) for x in commands[1:-1]]:
-                    tasks.append(Task(command, infile=tasks[-1], outfile=subprocess.PIPE))
+                    self.tasks.append(Task(command, infile=self.tasks[-1], outfile=subprocess.PIPE))
                 command, infile, outfile = self._parse_command(commands[-1])
-                tasks.append(Task(command, infile=tasks[-1], outfile=outfile))
-            for task in tasks:
-                print task
-                proc = task.run()
-            proc.wait()
+                self.tasks.append(Task(command, infile=self.tasks[-1], outfile=outfile))
+
+    def dry_run(self):
+        for task in self.tasks:
+            print task
+
+    def run(self):
+        if not self.tasks:
+            self.initialize()
+        for task in self.tasks:
+            proc = task.run()
+            if proc.stdout != subprocess.PIPE:
+                proc.wait()
 
 
 if __name__ == "__main__":
@@ -116,8 +128,11 @@ if __name__ == "__main__":
         pipeline.setup()
         print "Pipeline configuration created"
         print "Edit config.txt to specify pipeline parameters"
+    elif sys.argv[1] == "Test":
+        pipeline.load_parameters("config.txt")
+        pipeline.initialize()
+        pipeline.dry_run()
     elif sys.argv[1] == "Run":
-        with open("config.txt") as f:
-            parameters = json.loads(f.read())
-        pipeline.run(parameters)
+        pipeline.load_parameters("config.txt")
+        pipeline.run()
 
