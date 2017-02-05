@@ -51,10 +51,12 @@ class Task:
 
 class Pipeline:
     def __init__(self, jsonstr):
-        pipeline = json.loads(jsonstr)
+        self.parameters = json.loads(jsonstr)
+        with open(self.parameters["pipeline"]) as f:
+            pipeline = json.loads(f.read())
         self.name = pipeline["name"]
         self.commands = [task["command"] for task in pipeline["tasks"]]
-        self.tasks = []
+        self.initialize()
 
     def add_step(self, command):
         self.commands.append(command)
@@ -78,21 +80,11 @@ class Pipeline:
             outfile = None
         return command.strip(), infile, outfile
 
-    def setup(self):
+    def parameters(self):
         parameters = set()
         for command in self.commands:
             parameters.update(re.findall(r"{(.*?)}", command))
-        with open("config.txt", "w") as outfile:
-            outfile.write("{\n")
-            paramlist = list(parameters)
-            for parameter in paramlist[:-1]:
-                outfile.write('\t"{}": "",\n'.format(parameter))
-            outfile.write('\t"{}": ""\n'.format(paramlist[-1]))
-            outfile.write("}\n")
-
-    def load_parameters(self, configfile):
-        with open(configfile) as f:
-            self.parameters = json.loads(f.read())
+        return list(parameters)
 
     def initialize(self):
         self.tasks = []
@@ -113,26 +105,39 @@ class Pipeline:
             print task
 
     def run(self):
-        if not self.tasks:
-            self.initialize()
         for task in self.tasks:
             proc = task.run()
             if proc.stdout != subprocess.PIPE:
                 proc.wait()
 
 
+def setup_pipeline(pipefile):
+    with open(pipefile) as f:
+        pipeline = json.loads(f.read())
+    parameters = set()
+    for task in pipeline["tasks"]:
+        parameters.update(re.findall(r"{(.*?)}", task["command"]))
+    with open("config.txt", "w") as outfile:
+        outfile.write("{\n")
+        outfile.write('\t"pipeline": "{}",\n'.format(pipefile))
+        paramlist = list(parameters)
+        for parameter in paramlist[:-1]:
+            outfile.write('\t"{}": "",\n'.format(parameter))
+        outfile.write('\t"{}": ""\n'.format(paramlist[-1]))
+        outfile.write("}\n")
+
+
 if __name__ == "__main__":
-    with open(sys.argv[2]) as f:
-        pipeline = Pipeline(f.read())
     if sys.argv[1] == "Setup":
-        pipeline.setup()
+        setup_pipeline(sys.argv[2])
         print "Pipeline configuration created"
         print "Edit config.txt to specify pipeline parameters"
     elif sys.argv[1] == "Test":
-        pipeline.load_parameters("config.txt")
-        pipeline.initialize()
+        with open("config.txt") as f:
+            pipeline = Pipeline(f.read())
         pipeline.dry_run()
     elif sys.argv[1] == "Run":
-        pipeline.load_parameters("config.txt")
+        with open("config.txt") as f:
+            pipeline = Pipeline(f.read())
         pipeline.run()
 
