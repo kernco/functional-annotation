@@ -55,11 +55,10 @@ class Pipeline:
         with open(self.parameters["pipeline"]) as f:
             pipeline = json.loads(f.read())
         self.name = pipeline["name"]
-        self.commands = [task["command"] for task in pipeline["tasks"]]
-        self.initialize()
-
-    def add_step(self, command):
-        self.commands.append(command)
+        self.steps = pipeline["tasks"]
+        #self.commands = [task["command"] for task in pipeline["tasks"]]
+        self._initialize()
+        self.check_dependencies()
 
     def _parse_command(self, command):
         infile = ''
@@ -86,19 +85,63 @@ class Pipeline:
             parameters.update(re.findall(r"{(.*?)}", command))
         return list(parameters)
 
-    def initialize(self):
+    def _initialize(self):
         self.tasks = []
-        for command in self.commands:
-            command = command.format(**self.parameters)
-            commands = command.split('|')
+        for step in self.steps:
+            commandline = step["command"].format(**self.parameters)
+            if "depends" not in step:
+                dependencies = None
+            elif not isinstance(step["depends"], list):
+                dependencies = [step["depends"].format(**self.parameters)]
+            else:
+                dependencies = [dependency.format(**self.parameters) for dependency in step["depends"]]
+            if "produces" not in step:
+                products = None
+            elif not isinstance(step["produces"], list):
+                products = [step["produces"].format(**self.parameters)]
+            else:
+                products = [product.format(**self.parameters) for product in step["produces"]]
+            commands = commandline.split('|')
             command, infile, outfile = self._parse_command(commands[0])
-            self.tasks.append(Task(command, infile=infile, outfile=outfile))
+            self.tasks.append(Task(command, infile=infile, outfile=outfile, dependencies=dependencies, products=products))
             if len(commands) > 1:
                 self.tasks[-1].outfile = subprocess.PIPE
                 for command, infile, outfile in [self._parse_command(x) for x in commands[1:-1]]:
-                    self.tasks.append(Task(command, infile=self.tasks[-1], outfile=subprocess.PIPE))
+                    self.tasks.append(Task(command, infile=self.tasks[-1], outfile=subprocess.PIPE, dependencies=dependencies, products=products))
                 command, infile, outfile = self._parse_command(commands[-1])
-                self.tasks.append(Task(command, infile=self.tasks[-1], outfile=outfile))
+                self.tasks.append(Task(command, infile=self.tasks[-1], outfile=outfile, dependencies=dependencies, products=products))
+
+    #Return a list of all the filenames listed as dependencies of a task but
+    #not as the product of another task.
+    def dependencies(self):
+        task_dependencies = set()
+        task_products = set()
+        for task in self.tasks:
+            if task.dependencies:
+                task_dependencies.update(task.dependencies)
+            if task.products:
+                task_products.update(task.products)
+        return list(task_dependencies - task_products)
+
+    def check_dependencies(self):
+        deps = self.dependencies()
+        if deps:
+            print "Checking dependencies"
+            ok = True
+            for dependency in deps:
+                line = "{}: ".format(dependency)
+                if os.path.isfile(dependency):
+                    line += "Found"
+                else:
+                    line += "*Not Found*"
+                    ok = False
+                print line
+            if not ok:
+                print "ERROR: Required file(s) missing"
+                sys.exit(1)
+        else:
+            print "Pipeline has no dependencies"
+            return True
 
     def dry_run(self):
         for task in self.tasks:
@@ -107,7 +150,7 @@ class Pipeline:
     def run(self):
         for task in self.tasks:
             proc = task.run()
-            if proc.stdout != subprocess.PIPE:
+            if task.outfile != subprocess.PIPE:
                 proc.wait()
 
 
