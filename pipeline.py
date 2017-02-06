@@ -184,14 +184,17 @@ class Pipeline:
                 self._logmessage("Finished: {}".format(task.name))
 
 
-def setup_pipeline(pipefile):
+def setup_pipeline(pipefile, configfile):
+    if os.path.isfile(configfile):
+        print "{} already exists. Stopping.".format(configfile)
+        return
     with open(pipefile) as f:
         pipeline = json.loads(f.read())
     parameters = set()
     parameters.update(re.findall(r"{(.*?)}", pipeline["workdir"]))
     for task in pipeline["tasks"]:
         parameters.update(re.findall(r"{(.*?)}", task["command"]))
-    with open("config.txt", "w") as outfile:
+    with open(configfile, "w") as outfile:
         outfile.write("{\n")
         outfile.write('\t"pipeline": "{}",\n'.format(pipefile))
         paramlist = list(parameters)
@@ -199,20 +202,20 @@ def setup_pipeline(pipefile):
             outfile.write('\t"{}": "",\n'.format(parameter))
         outfile.write('\t"{}": ""\n'.format(paramlist[-1]))
         outfile.write("}\n")
+        print "Pipeline configuration created"
+        print "Edit {} to specify pipeline parameters".format(configfile)
 
 
 if __name__ == "__main__":
     logging.basicConfig(format='[%(asctime)s] %(message)s', level=logging.INFO)
     if sys.argv[1] == "Setup":
-        setup_pipeline(sys.argv[2])
-        print "Pipeline configuration created"
-        print "Edit config.txt to specify pipeline parameters"
+        setup_pipeline(sys.argv[2], sys.argv[3])
     elif sys.argv[1] == "Test":
-        with open("config.txt") as f:
+        with open(sys.argv[2]) as f:
             pipeline = Pipeline(f.read())
         pipeline.dry_run()
     elif sys.argv[1] == "Run":
-        with open("config.txt") as f:
+        with open(sys.argv[2]) as f:
             pipeline = Pipeline(f.read())
         pipeline.run()
 
