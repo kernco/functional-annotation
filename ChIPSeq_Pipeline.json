@@ -21,7 +21,7 @@
     },
     {
         "name": "Filtering Alignments",
-        "command": "samtools view -F 1804 -q 30 -b Samples/{sample}/bwa_aln.bam > Samples/{sample}/filter.bam",
+        "command": "samtools view -F 1804 -q 30 -b Samples/{sample}/bwa_aln.bam > Samples/{sample}/filter1.bam",
         "depends": "Samples/{sample}/bwa_aln.bam",
         "produces": "Samples/{sample}/filter1.bam"
     },
