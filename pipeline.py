@@ -4,6 +4,7 @@ import os
 import shlex
 import json
 import re
+import logging
 
 
 class Task:
@@ -52,6 +53,7 @@ class Task:
 class Pipeline:
     def __init__(self, jsonstr):
         self.parameters = json.loads(jsonstr)
+        logging.info("Loading pipeline from {}".format(self.parameters["pipeline"]))
         with open(self.parameters["pipeline"]) as f:
             pipeline = json.loads(f.read())
         self.name = pipeline["name"]
@@ -86,6 +88,7 @@ class Pipeline:
         return list(parameters)
 
     def _initialize(self):
+        logging.info("Initializing {}".format(self.name))
         self.tasks = []
         for step in self.steps:
             commandline = step["command"].format(**self.parameters)
@@ -124,23 +127,24 @@ class Pipeline:
         return list(task_dependencies - task_products)
 
     def check_dependencies(self):
+        logging.info("Checking dependencies")
         deps = self.dependencies()
         if deps:
-            print "Checking dependencies"
             ok = True
             for dependency in deps:
                 line = "{}: ".format(dependency)
                 if os.path.isfile(dependency):
                     line += "Found"
+                    logging.info(line)
                 else:
                     line += "*Not Found*"
                     ok = False
-                print line
+                    logging.error(line)
             if not ok:
-                print "ERROR: Required file(s) missing"
+                logging.error("ERROR: Required file(s) missing")
                 sys.exit(1)
         else:
-            print "Pipeline has no dependencies"
+            logging.info("Pipeline has no dependencies")
             return True
 
     def dry_run(self):
@@ -149,6 +153,7 @@ class Pipeline:
 
     def run(self):
         for task in self.tasks:
+            logging.info(str(task))
             proc = task.run()
             if task.outfile != subprocess.PIPE:
                 proc.wait()
@@ -171,6 +176,7 @@ def setup_pipeline(pipefile):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
     if sys.argv[1] == "Setup":
         setup_pipeline(sys.argv[2])
         print "Pipeline configuration created"
