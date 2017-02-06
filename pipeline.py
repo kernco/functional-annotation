@@ -168,7 +168,12 @@ class Pipeline:
 
     def dry_run(self):
         for task in self.tasks:
-            print task
+            try:
+                outdated = task.outdated()
+            except OSError:
+                outdated = True
+            if outdated:
+                self._logmessage("Dry Run {}: {}".format(task.name, task))
 
     def run(self):
         for task in self.tasks:
