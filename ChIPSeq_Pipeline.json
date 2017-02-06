@@ -15,23 +15,33 @@
     },
     {
         "name": "Mapping Reads (Step 2)",
-        "command": "bwa samse {assembly} Samples/{sample}/bwa_aln.sai Samples/{sample}/raw_reads_trimmed.fq.gz | samtools view -bS - > Samples/{sample}/bwa_aln.bam"
+        "command": "bwa samse {assembly} Samples/{sample}/bwa_aln.sai Samples/{sample}/raw_reads_trimmed.fq.gz | samtools view -bS - > Samples/{sample}/bwa_aln.bam",
+        "depends": ["{assembly}.bwt", "Samples/{sample}/bwa_aln.sai", "Samples/{sample}/raw_reads_trimmed.fq.gz"],
+        "produces": "Samples/{sample}/bwa_aln.bam"
     },
     {
         "name": "Filtering Alignments",
-        "command": "samtools view -F 1804 -q 30 -b Samples/{sample}/bwa_aln.bam > Samples/{sample}/filter1.bam"
+        "command": "samtools view -F 1804 -q 30 -b Samples/{sample}/bwa_aln.bam > Samples/{sample}/filter.bam",
+        "depends": "Samples/{sample}/bwa_aln.bam",
+        "produces": "Samples/{sample}/filter1.bam"
     },
     {
         "name": "Sorting BAM",
-        "command": "samtools sort -@ {threads} -o Samples/{sample}/sorted.bam Samples/{sample}/filter1.bam"
+        "command": "samtools sort -@ {threads} -o Samples/{sample}/sorted.bam Samples/{sample}/filter1.bam",
+        "depends": "Samples/{sample}/filter1.bam",
+        "produces": "Samples/{sample}/sorted.bam"
     },
     {
         "name": "Marking Duplicates",
-        "command": "picard-tools MarkDuplicates INPUT=Samples/{sample}/sorted.bam OUTPUT=Samples/{sample}/dup_marked.bam METRICS_FILE=Samples/{sample}/dup_metrics.txt VALIDATION_STRINGENCY=LENIENT ASSUME_SORTED=true REMOVE_DUPLICATES=false"
+        "command": "picard-tools MarkDuplicates INPUT=Samples/{sample}/sorted.bam OUTPUT=Samples/{sample}/dup_marked.bam METRICS_FILE=Samples/{sample}/dup_metrics.txt VALIDATION_STRINGENCY=LENIENT ASSUME_SORTED=true REMOVE_DUPLICATES=false",
+        "depends": "Samples/{sample}/sorted.bam",
+        "produces": ["Samples/{sample}/dup_marked.bam", "Samples/{sample}/dup_metrics.txt"]
     },
     {
         "name": "Removing Duplicates",
-        "command": "samtools view -F 1804 -q 30 -b Samples/{sample}/dup_marked.bam > Samples/{sample}/filter2.bam"
+        "command": "samtools view -F 1804 -q 30 -b Samples/{sample}/dup_marked.bam > Samples/{sample}/filter2.bam",
+        "depends": "Samples/{sample}/dup_marked.bam",
+        "produces": "Samples/{sample}/filter2.bam"
     }
     ]
 }
