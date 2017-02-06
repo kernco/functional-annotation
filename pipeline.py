@@ -8,8 +8,9 @@ import logging
 
 
 class Task:
-    def __init__(self, command, infile=None, outfile=None, dependencies=None, products=None):
+    def __init__(self, command, name=None, infile=None, outfile=None, dependencies=None, products=None):
         self.command = command
+        self.name = name
         self.infile = infile
         self.outfile = outfile
         self.dependencies = dependencies
@@ -37,7 +38,18 @@ class Task:
             return True #An output file doesn't exist
         return intime > outtime #At least one input file is newer than at least one output file
 
+    def check_dependencies(self):
+        if self.dependencies:
+            missing = []
+            for filename in self.dependencies:
+                if not os.path.isfile(filename):
+                    missing.append(filename)
+            if missing:
+                logging.error("{} not found, required by step {}".format(missing, self.name))
+                sys.exit(1)
+
     def run(self):
+        self.check_dependencies()
         stdin = None
         stdout = self.outfile
         if isinstance(self.infile, Task):
@@ -112,7 +124,9 @@ class Pipeline:
                 for command, infile, outfile in [self._parse_command(x) for x in commands[1:-1]]:
                     self.tasks.append(Task(command, infile=self.tasks[-1], outfile=subprocess.PIPE, dependencies=dependencies, products=products))
                 command, infile, outfile = self._parse_command(commands[-1])
-                self.tasks.append(Task(command, infile=self.tasks[-1], outfile=outfile, dependencies=dependencies, products=products))
+                self.tasks.append(Task(command, name=step["name"], infile=self.tasks[-1], outfile=outfile, dependencies=dependencies, products=products))
+            else:
+                self.tasks[-1].name = step["name"]
 
     #Return a list of all the filenames listed as dependencies of a task but
     #not as the product of another task.
@@ -153,10 +167,12 @@ class Pipeline:
 
     def run(self):
         for task in self.tasks:
-            logging.info(str(task))
+            if task.name:
+                logging.info("Starting: {}".format(task.name))
             proc = task.run()
             if task.outfile != subprocess.PIPE:
                 proc.wait()
+                logging.info("Finished: {}".format(task.name))
 
 
 def setup_pipeline(pipefile):
@@ -176,7 +192,7 @@ def setup_pipeline(pipefile):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
+    logging.basicConfig(format='[%(asctime)s] %(message)s', level=logging.INFO)
     if sys.argv[1] == "Setup":
         setup_pipeline(sys.argv[2])
         print "Pipeline configuration created"
