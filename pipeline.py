@@ -45,7 +45,7 @@ class Task:
                 if not os.path.isfile(filename):
                     missing.append(filename)
             if missing:
-                logging.error("{} not found, required by step {}".format(','.join(missing), self.name))
+                logging.error("ERROR: {} not found, required by step {}".format(','.join(missing), self.name))
                 sys.exit(1)
 
     def run(self):
@@ -148,14 +148,11 @@ class Pipeline:
         if deps:
             ok = True
             for dependency in deps:
-                line = "{}: ".format(dependency)
                 if os.path.isfile(dependency):
-                    line += "Found"
-                    logging.info(line)
+                    logging.info( "   Found  {}".format(dependency))
                 else:
-                    line += "*Not Found*"
+                    logging.error("*Missing* {}".format(dependency))
                     ok = False
-                    logging.error(line)
             if not ok:
                 logging.error("ERROR: Required file(s) missing")
                 sys.exit(1)
