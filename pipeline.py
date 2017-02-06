@@ -6,6 +6,9 @@ import json
 import re
 import logging
 
+class DependencyError(Exception):
+    def __init__(self, missing):
+        self.missing = missing
 
 class Task:
     def __init__(self, command, name=None, infile=None, outfile=None, dependencies=None, products=None, workdir=None):
@@ -46,8 +49,7 @@ class Task:
                 if not os.path.isfile(os.path.join(self.workdir, filename)):
                     missing.append(filename)
             if missing:
-                logging.error("ERROR: {} not found, required by step {}".format(','.join(missing), self.name))
-                sys.exit(1)
+                raise DependencyError(missing)
 
     def run(self):
         self.check_dependencies()
@@ -74,7 +76,6 @@ class Pipeline:
         self.name = pipeline["name"]
         self.steps = pipeline["tasks"]
         self.workdir = pipeline["workdir"].format(**self.parameters)
-        #self.commands = [task["command"] for task in pipeline["tasks"]]
         self._initialize()
         self.check_dependencies()
 
@@ -97,6 +98,9 @@ class Pipeline:
             outfile = None
         return command.strip(), infile, outfile
 
+    def _logmessage(self, message):
+        logging.info("{} in {}: {}".format(self.name, self.workdir, message))
+
     def parameters(self):
         parameters = set()
         for command in self.commands:
@@ -104,7 +108,7 @@ class Pipeline:
         return list(parameters)
 
     def _initialize(self):
-        logging.info("Initializing {}".format(self.name))
+        self._logmessage("Initializing")
         self.tasks = []
         for step in self.steps:
             commandline = step["command"].format(**self.parameters)
@@ -145,21 +149,21 @@ class Pipeline:
         return list(task_dependencies - task_products)
 
     def check_dependencies(self):
-        logging.info("Checking dependencies")
+        self._logmessage("Checking dependencies")
         deps = self.dependencies()
         if deps:
             ok = True
             for dependency in deps:
                 if os.path.isfile(os.path.join(self.workdir, dependency)):
-                    logging.info( "   Found  {}".format(os.path.join(self.workdir, dependency)))
+                    self._logmessage( "   Found  {}".format(os.path.join(self.workdir, dependency)))
                 else:
-                    logging.error("*Missing* {}".format(os.path.join(self.workdir, dependency)))
+                    self._logmessage("*Missing* {}".format(os.path.join(self.workdir, dependency)))
                     ok = False
             if not ok:
-                logging.error("ERROR: Required file(s) missing")
+                self._logmessage("ERROR: Required file(s) missing")
                 sys.exit(1)
         else:
-            logging.info("Pipeline has no dependencies")
+            self._logmessage("Pipeline has no dependencies")
             return True
 
     def dry_run(self):
@@ -168,13 +172,16 @@ class Pipeline:
 
     def run(self):
         for task in self.tasks:
-            proc = task.run()
+            try:
+                proc = task.run()
+            except DependencyError as err:
+                self._logmessage("ERROR: {} missing for {}".format(', '.join(err.missing), task.name))
             if not proc and task.name:
-                logging.info("Up to date: {}".format(task.name))
+                self._logmessage("Up to date: {}".format(task.name))
             elif task.outfile != subprocess.PIPE:
-                logging.info("Starting: {}".format(task.name))
+                self._logmessage("Starting: {}".format(task.name))
                 proc.wait()
-                logging.info("Finished: {}".format(task.name))
+                self._logmessage("Finished: {}".format(task.name))
 
 
 def setup_pipeline(pipefile):
