@@ -8,13 +8,14 @@ import logging
 
 
 class Task:
-    def __init__(self, command, name=None, infile=None, outfile=None, dependencies=None, products=None):
+    def __init__(self, command, name=None, infile=None, outfile=None, dependencies=None, products=None, workdir=None):
         self.command = command
         self.name = name
         self.infile = infile
         self.outfile = outfile
         self.dependencies = dependencies
         self.products = products
+        self.workdir = workdir
 
     def __str__(self):
         rstr = self.command
@@ -31,9 +32,9 @@ class Task:
     def outdated(self):
         if not self.dependencies or not self.products:
             return True # Always run if files not specified
-        intime = max([os.path.getmtime(filename) for filename in self.dependencies])
+        intime = max([os.path.getmtime(os.path.join(self.workdir, filename)) for filename in self.dependencies])
         try:
-            outtime = min([os.path.getmtime(filename) for filename in self.products])
+            outtime = min([os.path.getmtime(os.path.join(self.workdir, filename)) for filename in self.products])
         except OSError:
             return True #An output file doesn't exist
         return intime > outtime #At least one input file is newer than at least one output file
@@ -42,7 +43,7 @@ class Task:
         if self.dependencies:
             missing = []
             for filename in self.dependencies:
-                if not os.path.isfile(filename):
+                if not os.path.isfile(os.path.join(self.workdir, filename)):
                     missing.append(filename)
             if missing:
                 logging.error("ERROR: {} not found, required by step {}".format(','.join(missing), self.name))
@@ -57,10 +58,10 @@ class Task:
         if isinstance(self.infile, Task):
             stdin = self.infile.process.stdout
         elif self.infile:
-            stdin = open(self.infile, 'r')
+            stdin = open(os.path.join(self.workdir, self.infile), 'r')
         if self.outfile and self.outfile != subprocess.PIPE:
-            stdout = open(self.outfile, 'wb')
-        self.process = subprocess.Popen(shlex.split(self.command), stdin=stdin, stdout=stdout)
+            stdout = open(os.path.join(self.workdir, self.outfile), 'wb')
+        self.process = subprocess.Popen(shlex.split(self.command), stdin=stdin, stdout=stdout, cwd=self.workdir)
         return self.process
 
 
@@ -72,6 +73,7 @@ class Pipeline:
             pipeline = json.loads(f.read())
         self.name = pipeline["name"]
         self.steps = pipeline["tasks"]
+        self.workdir = pipeline["workdir"].format(**self.parameters)
         #self.commands = [task["command"] for task in pipeline["tasks"]]
         self._initialize()
         self.check_dependencies()
@@ -120,13 +122,13 @@ class Pipeline:
                 products = [product.format(**self.parameters) for product in step["produces"]]
             commands = commandline.split('|')
             command, infile, outfile = self._parse_command(commands[0])
-            self.tasks.append(Task(command, infile=infile, outfile=outfile, dependencies=dependencies, products=products))
+            self.tasks.append(Task(command, infile=infile, outfile=outfile, dependencies=dependencies, products=products, workdir=self.workdir))
             if len(commands) > 1:
                 self.tasks[-1].outfile = subprocess.PIPE
                 for command, infile, outfile in [self._parse_command(x) for x in commands[1:-1]]:
-                    self.tasks.append(Task(command, infile=self.tasks[-1], outfile=subprocess.PIPE, dependencies=dependencies, products=products))
+                    self.tasks.append(Task(command, infile=self.tasks[-1], outfile=subprocess.PIPE, dependencies=dependencies, products=products, workdir=self.workdir))
                 command, infile, outfile = self._parse_command(commands[-1])
-                self.tasks.append(Task(command, name=step["name"], infile=self.tasks[-1], outfile=outfile, dependencies=dependencies, products=products))
+                self.tasks.append(Task(command, name=step["name"], infile=self.tasks[-1], outfile=outfile, dependencies=dependencies, products=products, workdir=self.workdir))
             else:
                 self.tasks[-1].name = step["name"]
 
@@ -148,10 +150,10 @@ class Pipeline:
         if deps:
             ok = True
             for dependency in deps:
-                if os.path.isfile(dependency):
-                    logging.info( "   Found  {}".format(dependency))
+                if os.path.isfile(os.path.join(self.workdir, dependency)):
+                    logging.info( "   Found  {}".format(os.path.join(self.workdir, dependency)))
                 else:
-                    logging.error("*Missing* {}".format(dependency))
+                    logging.error("*Missing* {}".format(os.path.join(self.workdir, dependency)))
                     ok = False
             if not ok:
                 logging.error("ERROR: Required file(s) missing")
@@ -179,6 +181,7 @@ def setup_pipeline(pipefile):
     with open(pipefile) as f:
         pipeline = json.loads(f.read())
     parameters = set()
+    parameters.update(re.findall(r"{(.*?)}", pipeline["workdir"]))
     for task in pipeline["tasks"]:
         parameters.update(re.findall(r"{(.*?)}", task["command"]))
     with open("config.txt", "w") as outfile:
