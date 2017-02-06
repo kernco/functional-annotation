@@ -45,11 +45,13 @@ class Task:
                 if not os.path.isfile(filename):
                     missing.append(filename)
             if missing:
-                logging.error("{} not found, required by step {}".format(missing, self.name))
+                logging.error("{} not found, required by step {}".format(','.join(missing), self.name))
                 sys.exit(1)
 
     def run(self):
         self.check_dependencies()
+        if not self.outdated():
+            return None
         stdin = None
         stdout = self.outfile
         if isinstance(self.infile, Task):
@@ -167,10 +169,11 @@ class Pipeline:
 
     def run(self):
         for task in self.tasks:
-            if task.name:
-                logging.info("Starting: {}".format(task.name))
             proc = task.run()
-            if task.outfile != subprocess.PIPE:
+            if not proc and task.name:
+                logging.info("Up to date: {}".format(task.name))
+            elif task.outfile != subprocess.PIPE:
+                logging.info("Starting: {}".format(task.name))
                 proc.wait()
                 logging.info("Finished: {}".format(task.name))
 
