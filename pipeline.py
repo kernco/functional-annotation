@@ -77,28 +77,23 @@ class Command:
                 self._logmessage("ERROR: {} missing".format(', '.join(missing)))
                 raise DependencyError()
 
-    def _start_process(self, commandline, pipe=None, program_log=None):
+    def _start_process(self, commandline, inpipe=None, outpipe=None, program_log=None):
         if '|' in commandline:
             left, right = commandline.split('|', 1)
-            leftproc = self._start_process(left, pipe=subprocess.PIPE, program_log=program_log)
-            return self._start_process(right, pipe=leftproc.stdout, program_log=program_log)
+            leftproc = self._start_process(left, inpipe=inpipe, outpipe=subprocess.PIPE, program_log=program_log)
+            return self._start_process(right, inpipe=leftproc.stdout, program_log=program_log)
         else:
             command, infile, outfile = self._parse_command(commandline)
             stdin = None
             stdout = program_log
-            if pipe == subprocess.PIPE:
-                if infile:
-                    stdin = open(os.path.join(self.workdir, infile), 'r')
+            if outpipe == subprocess.PIPE:
                 stdout = subprocess.PIPE
-            elif pipe:
-                stdin = pipe
-                if outfile:
-                    stdout = open(os.path.join(self.workdir, outfile), 'wb')
-            else:
-                if outfile:
-                    stdout = open(os.path.join(self.workdir, outfile), 'wb')
-                if infile:
-                    stdin = open(os.path.join(self.workdir, infile), 'r')
+            if inpipe:
+                stdin = inpipe
+            if outfile:
+                stdout = open(os.path.join(self.workdir, outfile), 'wb')
+            if infile:
+                stdin = open(os.path.join(self.workdir, infile), 'r')
             return subprocess.Popen(shlex.split(command), stdin=stdin, stdout=stdout, stderr=program_log, cwd=self.workdir)
 
     def _logmessage(self, message):
@@ -267,7 +262,7 @@ def generate_config(pipefile):
         if "prevent_global" in pipeline and param in pipeline["prevent_global"]:
             continue
         paramcounts[param] += 1
-    parameters.update({k: "" for k in paramset})
+    parameters.update({k: "" for k in paramset if not k.startswith("{")})
     return parameters, paramcounts
 
 
