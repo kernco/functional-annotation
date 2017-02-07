@@ -74,15 +74,15 @@ class Command:
                 self._logmessage("ERROR: {} missing".format(', '.join(missing)))
                 raise DependencyError()
 
-    def _start_process(self, commandline, pipe=None):
+    def _start_process(self, commandline, pipe=None, program_log=None):
         if '|' in commandline:
             left, right = commandline.split('|', 1)
-            leftproc = self._start_process(left, pipe=subprocess.PIPE)
-            return self._start_process(right, pipe=leftproc.stdout)
+            leftproc = self._start_process(left, pipe=subprocess.PIPE, program_log=program_log)
+            return self._start_process(right, pipe=leftproc.stdout, program_log=program_log)
         else:
             command, infile, outfile = self._parse_command(commandline)
             stdin = None
-            stdout = None
+            stdout = program_log
             if pipe == subprocess.PIPE:
                 if infile:
                     stdin = open(os.path.join(self.workdir, infile), 'r')
@@ -96,7 +96,7 @@ class Command:
                     stdout = open(os.path.join(self.workdir, outfile), 'wb')
                 if infile:
                     stdin = open(os.path.join(self.workdir, infile), 'r')
-            return subprocess.Popen(shlex.split(command), stdin=stdin, stdout=stdout, cwd=self.workdir)
+            return subprocess.Popen(shlex.split(command), stdin=stdin, stdout=stdout, stderr=program_log, cwd=self.workdir)
 
     def _logmessage(self, message):
         self.parent._logmessage("{} - {}".format(self.name, message))
@@ -108,13 +108,13 @@ class Command:
         except OSError:
             self._logmessage(self.commandline)
 
-    def run(self):
+    def run(self, program_log=None):
         self.check_dependencies()
         if not self.outdated():
             self._logmessage("Up to date")
         else:
             self._logmessage("Starting")
-            self._start_process(self.commandline).wait()
+            self._start_process(self.commandline, program_log=program_log).wait()
             self._logmessage("Finished")
 
 
@@ -143,10 +143,10 @@ class ParallelTask:
             proc.join()
 
 
-    def run(self):
+    def run(self, program_log=None):
         procs = []
         for task in self.tasks:
-            procs.append(multiprocessing.Process(target=task.run))
+            procs.append(multiprocessing.Process(target=task.run, args=(program_log,)))
             procs[-1].start()
         for proc in procs:
             proc.join()
@@ -233,10 +233,10 @@ class Pipeline:
             task.dry_run()
         self._logmessage("Dry run finished")
 
-    def run(self):
+    def run(self, program_log=None):
         self._logmessage("Pipeline started")
         for task in self.tasks:
-            task.run()
+            task.run(program_log)
         self._logmessage("Pipeline finished")
 
 
@@ -287,5 +287,9 @@ if __name__ == "__main__":
     elif sys.argv[1] == "Run":
         with open(sys.argv[2]) as f:
             pipeline = Pipeline(json.loads(f.read()))
-        pipeline.run()
+        try:
+            proglog = open(sys.argv[3], 'w')
+        except IndexError:
+            proglog = None
+        pipeline.run(proglog)
 
