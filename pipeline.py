@@ -171,8 +171,6 @@ class Pipeline:
                     task_dependencies.update(task.dependencies)
                 if task.products:
                     task_products.update(task.products)
-            #elif isinstance(task, Pipeline):
-                #task.check_dependencies()
         self.dependencies = list(task_dependencies - task_products)
         self.products = list(task_products)
 
@@ -238,13 +236,13 @@ if __name__ == "__main__":
             print "{} already exists. Stopping.".format(sys.argv[3])
         else:
             config, paramcounts = generate_config(sys.argv[2])
-            config["pipeline"] = "{}".format(sys.argv[2])
+            outstr = json.dumps(config, sort_keys=True, indent=4, separators=(',', ': ')).strip()[1:-1] #Remove outer braces
+            extra = '    "pipeline": "{}",\n'.format(sys.argv[2])
             for k, v in paramcounts.items():
                 if v > 1:
-                    config[k] = ""
+                    extra += '    "{}": "",\n'.format(k)
             with open(sys.argv[3], 'w') as outfile:
-                json.dump(config, outfile, sort_keys=True, indent=4, separators=(',', ': '))
-                outfile.write("\n")
+                outfile.write("{\n" + extra + outstr + "}\n")
             print "Pipeline configuration created"
             print "Edit {} to specify pipeline parameters".format(sys.argv[3])
     elif sys.argv[1] == "Test":
