@@ -12,6 +12,9 @@ class DependencyError(Exception):
     def __init__(self, missing):
         self.missing = missing
 
+class TaskFailError(Exception):
+    pass
+
 
 class Command:
     def __init__(self, jsonobj, parent):
@@ -114,8 +117,12 @@ class Command:
             self._logmessage("Up to date")
         else:
             self._logmessage("Starting")
-            self._start_process(self.commandline, program_log=program_log).wait()
-            self._logmessage("Finished")
+            returncode = self._start_process(self.commandline, program_log=program_log).wait()
+            if returncode:
+                self._logmessage("Error running task")
+                raise TaskFailError()
+            else:
+                self._logmessage("Finished")
 
 
 class ParallelTask:
