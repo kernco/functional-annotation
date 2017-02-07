@@ -6,82 +6,23 @@ import json
 import re
 import logging
 import collections
+import multiprocessing
 
 class DependencyError(Exception):
     def __init__(self, missing):
         self.missing = missing
 
 class Task:
-    def __init__(self, command, name=None, infile=None, outfile=None, dependencies=None, products=None, workdir=None):
-        self.command = command
+    def __init__(self, commandline, name, parent, infile=None, outfile=None, dependencies=None, products=None, workdir=None):
+        self.commandline = commandline
         self.name = name
-        self.infile = infile
-        self.outfile = outfile
+        self.parent = parent
         self.dependencies = dependencies
         self.products = products
         self.workdir = workdir
 
     def __str__(self):
-        rstr = self.command
-        if isinstance(self.infile, Task):
-            rstr = '| ' + rstr
-        elif self.infile:
-            rstr = rstr + " < " + self.infile
-        if self.outfile == subprocess.PIPE:
-            rstr = rstr + ' |'
-        elif self.outfile:
-            rstr = rstr + " > " + self.outfile
-        return rstr
-
-    def outdated(self):
-        if not self.dependencies or not self.products:
-            return True # Always run if files not specified
-        intime = max([os.path.getmtime(os.path.join(self.workdir, filename)) for filename in self.dependencies])
-        try:
-            outtime = min([os.path.getmtime(os.path.join(self.workdir, filename)) for filename in self.products])
-        except OSError:
-            return True #An output file doesn't exist
-        return intime > outtime #At least one input file is newer than at least one output file
-
-    def check_dependencies(self):
-        if self.dependencies:
-            missing = []
-            for filename in self.dependencies:
-                if not os.path.isfile(os.path.join(self.workdir, filename)):
-                    missing.append(filename)
-            if missing:
-                raise DependencyError(missing)
-
-    def run(self):
-        self.check_dependencies()
-        if not self.outdated():
-            return None
-        stdin = None
-        stdout = self.outfile
-        if isinstance(self.infile, Task):
-            stdin = self.infile.process.stdout
-        elif self.infile:
-            stdin = open(os.path.join(self.workdir, self.infile), 'r')
-        if self.outfile and self.outfile != subprocess.PIPE:
-            stdout = open(os.path.join(self.workdir, self.outfile), 'wb')
-        self.process = subprocess.Popen(shlex.split(self.command), stdin=stdin, stdout=stdout, cwd=self.workdir)
-        return self.process
-
-
-class Pipeline:
-    def __init__(self, parameters):
-        self.parameters = parameters
-        logging.info("Loading pipeline from {}".format(self.parameters["pipeline"]))
-        with open(self.parameters["pipeline"]) as f:
-            pipeline = json.loads(f.read())
-        self.name = pipeline["name"]
-        self.steps = pipeline["tasks"]
-        if "workdir" in pipeline:
-            self.workdir = pipeline["workdir"].format(**self.parameters)
-        else:
-            self.workdir = ""
-        self._initialize()
-        self.check_dependencies()
+        return self.commandline
 
     def _parse_command(self, command):
         infile = ''
@@ -101,6 +42,85 @@ class Pipeline:
         if outfile == '':
             outfile = None
         return command.strip(), infile, outfile
+
+    def outdated(self):
+        if not self.dependencies or not self.products:
+            return True # Always run if files not specified
+        intime = max([os.path.getmtime(os.path.join(self.workdir, filename)) for filename in self.dependencies])
+        try:
+            outtime = min([os.path.getmtime(os.path.join(self.workdir, filename)) for filename in self.products])
+        except OSError:
+            return True #An output file doesn't exist
+        return intime > outtime #At least one input file is newer than at least one output file
+
+    def check_dependencies(self):
+        if self.dependencies:
+            missing = []
+            for filename in self.dependencies:
+                if not os.path.isfile(os.path.join(self.workdir, filename)):
+                    missing.append(filename)
+            if missing:
+                self._logmessage("ERROR: {} missing".format(', '.join(missing)))
+                raise DependencyError()
+
+    def _start_process(self, commandline, pipe=None):
+        if '|' in commandline:
+            left, right = commandline.split('|', 1)
+            leftproc = self._start_process(left, pipe=subprocess.PIPE)
+            return self._start_process(right, pipe=leftproc.stdout)
+        else:
+            command, infile, outfile = self._parse_command(commandline)
+            stdin = None
+            stdout = None
+            if pipe == subprocess.PIPE:
+                if infile:
+                    stdin = open(os.path.join(self.workdir, infile), 'r')
+                stdout = subprocess.PIPE
+            elif pipe:
+                stdin = pipe
+                if outfile:
+                    stdout = open(os.path.join(self.workdir, outfile), 'wb')
+            else:
+                if outfile:
+                    stdout = open(os.path.join(self.workdir, outfile), 'wb')
+                if infile:
+                    stdin = open(os.path.join(self.workdir, infile), 'r')
+            return subprocess.Popen(shlex.split(command), stdin=stdin, stdout=stdout, cwd=self.workdir)
+
+    def _logmessage(self, message):
+        self.parent._logmessage("{} - {}".format(self.name, message))
+
+    def dry_run(self):
+        try:
+            if self.outdated():
+                self._logmessage(self.commandline)
+        except OSError:
+            self._logmessage(self.commandline)
+
+    def run(self):
+        self.check_dependencies()
+        if not self.outdated():
+            self._logmessage("Up to date")
+        else:
+            self._logmessage("Starting")
+            self._start_process(self.commandline).wait()
+            self._logmessage("Finished")
+
+
+class Pipeline:
+    def __init__(self, parameters):
+        self.parameters = parameters
+        logging.info("Loading pipeline from {}".format(self.parameters["pipeline"]))
+        with open(self.parameters["pipeline"]) as f:
+            pipeline = json.loads(f.read())
+        self.name = pipeline["name"]
+        self.steps = pipeline["tasks"]
+        if "workdir" in pipeline:
+            self.workdir = pipeline["workdir"].format(**self.parameters)
+        else:
+            self.workdir = ""
+        self._initialize()
+        self.check_dependencies()
 
     def _logmessage(self, message):
         if self.workdir:
@@ -133,17 +153,7 @@ class Pipeline:
                     products = [step["produces"].format(**self.parameters)]
                 else:
                     products = [product.format(**self.parameters) for product in step["produces"]]
-                commands = commandline.split('|')
-                command, infile, outfile = self._parse_command(commands[0])
-                self.tasks.append(Task(command, infile=infile, outfile=outfile, dependencies=dependencies, products=products, workdir=self.workdir))
-                if len(commands) > 1:
-                    self.tasks[-1].outfile = subprocess.PIPE
-                    for command, infile, outfile in [self._parse_command(x) for x in commands[1:-1]]:
-                        self.tasks.append(Task(command, infile=self.tasks[-1], outfile=subprocess.PIPE, dependencies=dependencies, products=products, workdir=self.workdir))
-                    command, infile, outfile = self._parse_command(commands[-1])
-                    self.tasks.append(Task(command, name=step["name"], infile=self.tasks[-1], outfile=outfile, dependencies=dependencies, products=products, workdir=self.workdir))
-                else:
-                    self.tasks[-1].name = step["name"]
+                self.tasks.append(Task(commandline=commandline, name=step["name"], parent=self, dependencies=dependencies, products=products, workdir=self.workdir))
             elif "pipeline" in step:
                 params = self.parameters.copy()
                 for k, v in self.parameters[step["name"]].items():
@@ -166,29 +176,6 @@ class Pipeline:
         self.dependencies = list(task_dependencies - task_products)
         self.products = list(task_products)
 
-    #Return a list of all the filenames listed as dependencies of a task but
-    #not as the product of another task.
-    #TODO: Look for better way to do these
-    #def dependencies(self):
-        #task_dependencies = set()
-        #task_products = set()
-        #for task in self.tasks:
-            #if task.dependencies:
-                #task_dependencies.update(task.dependencies)
-            #if task.products:
-                #task_products.update(task.products)
-        #return list(task_dependencies - task_products)
-
-    #def products(self):
-        #task_dependencies = set()
-        #task_products = set()
-        #for task in self.tasks:
-            #if task.dependencies:
-                #task_dependencies.update(task.dependencies)
-            #if task.products:
-                #task_products.update(task.products)
-        #return list(task_products - task_dependencies)
-
     def check_dependencies(self):
         self._logmessage("Checking dependencies")
         deps = self.dependencies
@@ -208,34 +195,16 @@ class Pipeline:
             return True
 
     def dry_run(self):
+        self._logmessage("Dry run started")
         for task in self.tasks:
-            if isinstance(task, Task):
-                try:
-                    outdated = task.outdated()
-                except OSError:
-                    outdated = True
-                if outdated:
-                    self._logmessage("Dry Run {}: {}".format(task.name, task))
-            elif isinstance(task, Pipeline):
-                task.dry_run()
+            task.dry_run()
+        self._logmessage("Dry run finished")
 
     def run(self):
-        self._logmessage("Pipeline Started")
+        self._logmessage("Pipeline started")
         for task in self.tasks:
-            if isinstance(task, Pipeline):
-                task.run()
-                continue
-            try:
-                proc = task.run()
-            except DependencyError as err:
-                self._logmessage("ERROR: {} missing for {}".format(', '.join(err.missing), task.name))
-            if not proc and task.name:
-                self._logmessage("Up to date: {}".format(task.name))
-            elif task.outfile != subprocess.PIPE:
-                self._logmessage("Starting: {}".format(task.name))
-                proc.wait()
-                self._logmessage("Finished: {}".format(task.name))
-        self._logmessage("Pipeline Finished")
+            task.run()
+        self._logmessage("Pipeline finished")
 
 
 def generate_config(pipefile):
@@ -281,11 +250,9 @@ if __name__ == "__main__":
     elif sys.argv[1] == "Test":
         with open(sys.argv[2]) as f:
             pipeline = Pipeline(json.loads(f.read()))
-        #pipeline = Pipeline(sys.argv[2])
         pipeline.dry_run()
     elif sys.argv[1] == "Run":
         with open(sys.argv[2]) as f:
             pipeline = Pipeline(json.loads(f.read()))
-        #pipeline = Pipeline(sys.argv[2])
         pipeline.run()
 
