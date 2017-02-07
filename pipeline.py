@@ -5,6 +5,7 @@ import shlex
 import json
 import re
 import logging
+import collections
 
 class DependencyError(Exception):
     def __init__(self, missing):
@@ -68,8 +69,8 @@ class Task:
 
 
 class Pipeline:
-    def __init__(self, jsonstr):
-        self.parameters = json.loads(jsonstr)
+    def __init__(self, parameters):
+        self.parameters = parameters #json.loads(jsonstr)
         logging.info("Loading pipeline from {}".format(self.parameters["pipeline"]))
         with open(self.parameters["pipeline"]) as f:
             pipeline = json.loads(f.read())
@@ -189,38 +190,50 @@ class Pipeline:
                 self._logmessage("Finished: {}".format(task.name))
 
 
-def setup_pipeline(pipefile, configfile):
-    if os.path.isfile(configfile):
-        print "{} already exists. Stopping.".format(configfile)
-        return
+def generate_config(pipefile):
     with open(pipefile) as f:
         pipeline = json.loads(f.read())
-    parameters = set()
-    parameters.update(re.findall(r"{(.*?)}", pipeline["workdir"]))
+    paramset = set()
+    parameters = {}
+    paramcounts = collections.defaultdict(int)
+    for k, v in pipeline.items():
+        if isinstance(v, basestring): #NOT PYTHON3 compatible. Need to change later
+            paramset.update(re.findall(r"{(.*?)}", v))
     for task in pipeline["tasks"]:
-        parameters.update(re.findall(r"{(.*?)}", task["command"]))
-    with open(configfile, "w") as outfile:
-        outfile.write("{\n")
-        outfile.write('\t"pipeline": "{}",\n'.format(pipefile))
-        paramlist = list(parameters)
-        for parameter in paramlist[:-1]:
-            outfile.write('\t"{}": "",\n'.format(parameter))
-        outfile.write('\t"{}": ""\n'.format(paramlist[-1]))
-        outfile.write("}\n")
-        print "Pipeline configuration created"
-        print "Edit {} to specify pipeline parameters".format(configfile)
+        if "command" in task:
+            paramset.update(re.findall(r"{(.*?)}", task["command"]))
+        elif "pipeline" in task:
+            parameters[task["name"]], subpcounts = generate_config(os.path.join(os.path.dirname(pipefile), task["pipeline"]))
+            for param in subpcounts.keys():
+                paramcounts[param] += 1
+    for param in paramset:
+        paramcounts[param] += 1
+    parameters.update({k: "" for k in paramset})
+    return parameters, paramcounts
 
 
 if __name__ == "__main__":
     logging.basicConfig(format='[%(asctime)s] %(message)s', level=logging.INFO)
     if sys.argv[1] == "Setup":
-        setup_pipeline(sys.argv[2], sys.argv[3])
+        if os.path.isfile(sys.argv[3]):
+            print "{} already exists. Stopping.".format(sys.argv[3])
+        else:
+            config, paramcounts = generate_config(sys.argv[2])
+            config["pipeline"] = "{}".format(sys.argv[2])
+            for k, v in paramcounts.items():
+                if v > 1:
+                    config[k] = ""
+            with open(sys.argv[3], 'w') as outfile:
+                json.dump(config, outfile, sort_keys=True, indent=4, separators=(',', ': '))
+                outfile.write("\n")
+            print "Pipeline configuration created"
+            print "Edit {} to specify pipeline parameters".format(sys.argv[3])
     elif sys.argv[1] == "Test":
         with open(sys.argv[2]) as f:
-            pipeline = Pipeline(f.read())
+            pipeline = Pipeline(json.loads(f.read()))
         pipeline.dry_run()
     elif sys.argv[1] == "Run":
         with open(sys.argv[2]) as f:
-            pipeline = Pipeline(f.read())
+            pipeline = Pipeline(json.loads(f.read()))
         pipeline.run()
 
