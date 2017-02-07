@@ -70,13 +70,16 @@ class Task:
 
 class Pipeline:
     def __init__(self, parameters):
-        self.parameters = parameters #json.loads(jsonstr)
+        self.parameters = parameters
         logging.info("Loading pipeline from {}".format(self.parameters["pipeline"]))
         with open(self.parameters["pipeline"]) as f:
             pipeline = json.loads(f.read())
         self.name = pipeline["name"]
         self.steps = pipeline["tasks"]
-        self.workdir = pipeline["workdir"].format(**self.parameters)
+        if "workdir" in pipeline:
+            self.workdir = pipeline["workdir"].format(**self.parameters)
+        else:
+            self.workdir = ""
         self._initialize()
         self.check_dependencies()
 
@@ -100,7 +103,10 @@ class Pipeline:
         return command.strip(), infile, outfile
 
     def _logmessage(self, message):
-        logging.info("{} in {}: {}".format(self.name, self.workdir, message))
+        if self.workdir:
+            logging.info("{} in {}: {}".format(self.name, self.workdir, message))
+        else:
+            logging.info("{}: {}".format(self.name, message))
 
     def parameters(self):
         parameters = set()
@@ -110,48 +116,82 @@ class Pipeline:
 
     def _initialize(self):
         self._logmessage("Initializing")
+        #Setup tasks
         self.tasks = []
         for step in self.steps:
-            commandline = step["command"].format(**self.parameters)
-            if "depends" not in step:
-                dependencies = None
-            elif not isinstance(step["depends"], list):
-                dependencies = [step["depends"].format(**self.parameters)]
-            else:
-                dependencies = [dependency.format(**self.parameters) for dependency in step["depends"]]
-            if "produces" not in step:
-                products = None
-            elif not isinstance(step["produces"], list):
-                products = [step["produces"].format(**self.parameters)]
-            else:
-                products = [product.format(**self.parameters) for product in step["produces"]]
-            commands = commandline.split('|')
-            command, infile, outfile = self._parse_command(commands[0])
-            self.tasks.append(Task(command, infile=infile, outfile=outfile, dependencies=dependencies, products=products, workdir=self.workdir))
-            if len(commands) > 1:
-                self.tasks[-1].outfile = subprocess.PIPE
-                for command, infile, outfile in [self._parse_command(x) for x in commands[1:-1]]:
-                    self.tasks.append(Task(command, infile=self.tasks[-1], outfile=subprocess.PIPE, dependencies=dependencies, products=products, workdir=self.workdir))
-                command, infile, outfile = self._parse_command(commands[-1])
-                self.tasks.append(Task(command, name=step["name"], infile=self.tasks[-1], outfile=outfile, dependencies=dependencies, products=products, workdir=self.workdir))
-            else:
-                self.tasks[-1].name = step["name"]
-
-    #Return a list of all the filenames listed as dependencies of a task but
-    #not as the product of another task.
-    def dependencies(self):
+            if "command" in step:
+                commandline = step["command"].format(**self.parameters)
+                if "depends" not in step:
+                    dependencies = None
+                elif not isinstance(step["depends"], list):
+                    dependencies = [step["depends"].format(**self.parameters)]
+                else:
+                    dependencies = [dependency.format(**self.parameters) for dependency in step["depends"]]
+                if "produces" not in step:
+                    products = None
+                elif not isinstance(step["produces"], list):
+                    products = [step["produces"].format(**self.parameters)]
+                else:
+                    products = [product.format(**self.parameters) for product in step["produces"]]
+                commands = commandline.split('|')
+                command, infile, outfile = self._parse_command(commands[0])
+                self.tasks.append(Task(command, infile=infile, outfile=outfile, dependencies=dependencies, products=products, workdir=self.workdir))
+                if len(commands) > 1:
+                    self.tasks[-1].outfile = subprocess.PIPE
+                    for command, infile, outfile in [self._parse_command(x) for x in commands[1:-1]]:
+                        self.tasks.append(Task(command, infile=self.tasks[-1], outfile=subprocess.PIPE, dependencies=dependencies, products=products, workdir=self.workdir))
+                    command, infile, outfile = self._parse_command(commands[-1])
+                    self.tasks.append(Task(command, name=step["name"], infile=self.tasks[-1], outfile=outfile, dependencies=dependencies, products=products, workdir=self.workdir))
+                else:
+                    self.tasks[-1].name = step["name"]
+            elif "pipeline" in step:
+                params = self.parameters.copy()
+                for k, v in self.parameters[step["name"]].items():
+                    if v:
+                        params[k] = v
+                params["pipeline"] = os.path.join(os.path.dirname(self.parameters["pipeline"]), step["pipeline"])
+                pipeline = Pipeline(params)
+                self.tasks.append(pipeline)
+        #Set dependencies and products
         task_dependencies = set()
         task_products = set()
         for task in self.tasks:
-            if task.dependencies:
-                task_dependencies.update(task.dependencies)
-            if task.products:
-                task_products.update(task.products)
-        return list(task_dependencies - task_products)
+            if isinstance(task, Task):
+                if task.dependencies:
+                    task_dependencies.update(task.dependencies)
+                if task.products:
+                    task_products.update(task.products)
+            #elif isinstance(task, Pipeline):
+                #task.check_dependencies()
+        self.dependencies = list(task_dependencies - task_products)
+        self.products = list(task_products)
+
+    #Return a list of all the filenames listed as dependencies of a task but
+    #not as the product of another task.
+    #TODO: Look for better way to do these
+    #def dependencies(self):
+        #task_dependencies = set()
+        #task_products = set()
+        #for task in self.tasks:
+            #if task.dependencies:
+                #task_dependencies.update(task.dependencies)
+            #if task.products:
+                #task_products.update(task.products)
+        #return list(task_dependencies - task_products)
+
+    #def products(self):
+        #task_dependencies = set()
+        #task_products = set()
+        #for task in self.tasks:
+            #if task.dependencies:
+                #task_dependencies.update(task.dependencies)
+            #if task.products:
+                #task_products.update(task.products)
+        #return list(task_products - task_dependencies)
 
     def check_dependencies(self):
         self._logmessage("Checking dependencies")
-        deps = self.dependencies()
+        deps = self.dependencies
         if deps:
             ok = True
             for dependency in deps:
@@ -169,12 +209,15 @@ class Pipeline:
 
     def dry_run(self):
         for task in self.tasks:
-            try:
-                outdated = task.outdated()
-            except OSError:
-                outdated = True
-            if outdated:
-                self._logmessage("Dry Run {}: {}".format(task.name, task))
+            if isinstance(task, Task):
+                try:
+                    outdated = task.outdated()
+                except OSError:
+                    outdated = True
+                if outdated:
+                    self._logmessage("Dry Run {}: {}".format(task.name, task))
+            elif isinstance(task, Pipeline):
+                task.dry_run()
 
     def run(self):
         for task in self.tasks:
@@ -233,9 +276,11 @@ if __name__ == "__main__":
     elif sys.argv[1] == "Test":
         with open(sys.argv[2]) as f:
             pipeline = Pipeline(json.loads(f.read()))
+        #pipeline = Pipeline(sys.argv[2])
         pipeline.dry_run()
     elif sys.argv[1] == "Run":
         with open(sys.argv[2]) as f:
             pipeline = Pipeline(json.loads(f.read()))
+        #pipeline = Pipeline(sys.argv[2])
         pipeline.run()
 
