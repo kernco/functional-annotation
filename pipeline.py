@@ -12,7 +12,7 @@ class DependencyError(Exception):
     def __init__(self, missing):
         self.missing = missing
 
-class Task:
+class Command:
     def __init__(self, commandline, name, parent, infile=None, outfile=None, dependencies=None, products=None, workdir=None):
         self.commandline = commandline
         self.name = name
@@ -153,7 +153,7 @@ class Pipeline:
                     products = [step["produces"].format(**self.parameters)]
                 else:
                     products = [product.format(**self.parameters) for product in step["produces"]]
-                self.tasks.append(Task(commandline=commandline, name=step["name"], parent=self, dependencies=dependencies, products=products, workdir=self.workdir))
+                self.tasks.append(Command(commandline=commandline, name=step["name"], parent=self, dependencies=dependencies, products=products, workdir=self.workdir))
             elif "pipeline" in step:
                 params = self.parameters.copy()
                 for k, v in self.parameters[step["name"]].items():
@@ -166,7 +166,7 @@ class Pipeline:
         task_dependencies = set()
         task_products = set()
         for task in self.tasks:
-            if isinstance(task, Task):
+            if isinstance(task, Command):
                 if task.dependencies:
                     task_dependencies.update(task.dependencies)
                 if task.products:
