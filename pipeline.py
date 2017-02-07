@@ -12,14 +12,25 @@ class DependencyError(Exception):
     def __init__(self, missing):
         self.missing = missing
 
+
 class Command:
-    def __init__(self, commandline, name, parent, infile=None, outfile=None, dependencies=None, products=None, workdir=None):
-        self.commandline = commandline
-        self.name = name
+    def __init__(self, jsonobj, parent):
+        self.commandline = jsonobj["command"].format(**parent.parameters)
+        if "depends" not in jsonobj:
+            self.dependencies = None
+        elif not isinstance(jsonobj["depends"], list):
+            self.dependencies = [jsonobj["depends"].format(**parent.parameters)]
+        else:
+            self.dependencies = [dependency.format(**parent.parameters) for dependency in jsonobj["depends"]]
+        if "produces" not in jsonobj:
+            self.products = None
+        elif not isinstance(jsonobj["produces"], list):
+            self.products = [jsonobj["produces"].format(**parent.parameters)]
+        else:
+            self.products = [product.format(**parent.parameters) for product in jsonobj["produces"]]
+        self.name = jsonobj["name"]
         self.parent = parent
-        self.dependencies = dependencies
-        self.products = products
-        self.workdir = workdir
+        self.workdir = parent.workdir
 
     def __str__(self):
         return self.commandline
@@ -107,8 +118,47 @@ class Command:
             self._logmessage("Finished")
 
 
+class ParallelTask:
+    def __init__(self, tasks, parent):
+        #This is repeated code from Pipeline._initialize
+        #TODO: Don't repeat code
+        self.tasks = []
+        for step in tasks:
+            if isinstance(step, list):
+                self.tasks.append(ParallelTask(step, parent=parent))
+            elif "command" in step:
+                self.tasks.append(Command(step, parent=parent))
+            elif "pipeline" in step:
+                params = parent.parameters[step["name"]]
+                params["pipeline"] = os.path.join(os.path.dirname(parent.parameters["pipeline"]), step["pipeline"])
+                self.tasks.append(Pipeline(params, parent=parent))
+        self.parent = parent
+
+    def dry_run(self):
+        procs = []
+        for task in self.tasks:
+            procs.append(multiprocessing.Process(target=task.dry_run))
+            procs[-1].start()
+        for proc in procs:
+            proc.join()
+
+
+    def run(self):
+        procs = []
+        for task in self.tasks:
+            procs.append(multiprocessing.Process(target=task.run))
+            procs[-1].start()
+        for proc in procs:
+            proc.join()
+
+
 class Pipeline:
-    def __init__(self, parameters):
+    def __init__(self, parameters, parent=None):
+        if parent:
+            for k, v in parameters.items():
+                if not v:
+                    if k in parent.parameters:
+                        parameters[k] = parent.parameters[k]
         self.parameters = parameters
         logging.info("Loading pipeline from {}".format(self.parameters["pipeline"]))
         with open(self.parameters["pipeline"]) as f:
@@ -139,29 +189,14 @@ class Pipeline:
         #Setup tasks
         self.tasks = []
         for step in self.steps:
-            if "command" in step:
-                commandline = step["command"].format(**self.parameters)
-                if "depends" not in step:
-                    dependencies = None
-                elif not isinstance(step["depends"], list):
-                    dependencies = [step["depends"].format(**self.parameters)]
-                else:
-                    dependencies = [dependency.format(**self.parameters) for dependency in step["depends"]]
-                if "produces" not in step:
-                    products = None
-                elif not isinstance(step["produces"], list):
-                    products = [step["produces"].format(**self.parameters)]
-                else:
-                    products = [product.format(**self.parameters) for product in step["produces"]]
-                self.tasks.append(Command(commandline=commandline, name=step["name"], parent=self, dependencies=dependencies, products=products, workdir=self.workdir))
+            if isinstance(step, list):
+                self.tasks.append(ParallelTask(step, parent=self))
+            elif "command" in step:
+                self.tasks.append(Command(step, parent=self))
             elif "pipeline" in step:
-                params = self.parameters.copy()
-                for k, v in self.parameters[step["name"]].items():
-                    if v:
-                        params[k] = v
+                params = self.parameters[step["name"]]
                 params["pipeline"] = os.path.join(os.path.dirname(self.parameters["pipeline"]), step["pipeline"])
-                pipeline = Pipeline(params)
-                self.tasks.append(pipeline)
+                self.tasks.append(Pipeline(params, parent=self))
         #Set dependencies and products
         task_dependencies = set()
         task_products = set()
