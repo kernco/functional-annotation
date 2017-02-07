@@ -220,7 +220,11 @@ class Pipeline:
                 task.dry_run()
 
     def run(self):
+        self._logmessage("Pipeline Started")
         for task in self.tasks:
+            if isinstance(task, Pipeline):
+                task.run()
+                continue
             try:
                 proc = task.run()
             except DependencyError as err:
@@ -231,6 +235,7 @@ class Pipeline:
                 self._logmessage("Starting: {}".format(task.name))
                 proc.wait()
                 self._logmessage("Finished: {}".format(task.name))
+        self._logmessage("Pipeline Finished")
 
 
 def generate_config(pipefile):
