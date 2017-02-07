@@ -207,6 +207,8 @@ def generate_config(pipefile):
             for param in subpcounts.keys():
                 paramcounts[param] += 1
     for param in paramset:
+        if "prevent_global" in pipeline and param in pipeline["prevent_global"]:
+            continue
         paramcounts[param] += 1
     parameters.update({k: "" for k in paramset})
     return parameters, paramcounts

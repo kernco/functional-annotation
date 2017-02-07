@@ -1,6 +1,7 @@
 {
     "name": "BWA Alignment",
     "workdir": "{resultdir}",
+    "prevent_global": ["resultdir"],
     "tasks": [
     {
         "name": "Trimming Reads",
