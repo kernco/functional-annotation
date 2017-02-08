@@ -47,7 +47,7 @@
     },
     {
         "name": "Calculating QC Metrics",
-        "command": "bamToBed -i filter1.bam | awk 'BEGIN{{OFS=\"\\t\"}}{{print $1,$2,$4,$6,$9,$10}}' | sort | uniq -c | awk 'BEGIN{{mt=1;m0=1;m1=1;m2=1}} ($1==1){{m1=m1+1}} ($1==2){{m2=m2+1}} {{m0=m0+1}} {{mt=mt+$1}} END{{printf \"%d\\t%d\\t%d\\t%d\\t%f\\t%f\\t%f\\n\",mt,m0,m1,m2,m0/mt,m1/m0,m1/m2}}' > qc_metrics.txt",
+        "command": "bamToBed -i filter1.bam | awk 'BEGIN{{OFS=\"\\t\"}}{{print $1,$2,$4,$6,$9,$10}}' | sort | uniq -c | awk 'BEGIN{{mt=1;m0=1;m1=1;m2=1}} ($1==1){{m1=m1+1}} ($1==2){{m2=m2+1}} {{m0=m0+1}} {{mt=mt+$1}} END{{printf \"Total Reads:\\t%d\\nDistinct Reads:\\t%d\\nOne Read:\\t%d\\nTwo Reads:\\t%d\\nNRF:\\t%f\\nPBC1:\\t%f\\nPBC2:\\t%f\\n\",mt,m0,m1,m2,m0/mt,m1/m0,m1/m2}}' > qc_metrics.txt",
         "depends": "filter1.bam",
         "produces": "qc_metrics.txt"
     }
