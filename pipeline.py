@@ -242,6 +242,10 @@ class Pipeline:
         self._logmessage("Pipeline finished")
 
 
+def flatten(l): 
+    return flatten(l[0]) + (flatten(l[1:]) if len(l) > 1 else []) if isinstance(l, list) else [l]
+
+        
 def generate_config(pipefile):
     with open(pipefile) as f:
         pipeline = json.loads(f.read())
@@ -251,18 +255,19 @@ def generate_config(pipefile):
     for k, v in pipeline.items():
         if isinstance(v, basestring): #NOT PYTHON3 compatible. Need to change later
             paramset.update(re.findall(r"{(.*?)}", v))
-    for task in pipeline["tasks"]:
+    for task in flatten(pipeline["tasks"]):
         if "command" in task:
             paramset.update(re.findall(r"{(.*?)}", task["command"]))
         elif "pipeline" in task:
             parameters[task["name"]], subpcounts = generate_config(os.path.join(os.path.dirname(pipefile), task["pipeline"]))
             for param in subpcounts.keys():
                 paramcounts[param] += 1
+    paramset = set([param for param in paramset if not param.startswith("{")])
     for param in paramset:
         if "prevent_global" in pipeline and param in pipeline["prevent_global"]:
             continue
         paramcounts[param] += 1
-    parameters.update({k: "" for k in paramset if not k.startswith("{")})
+    parameters.update({k: "" for k in paramset})
     return parameters, paramcounts
 
 

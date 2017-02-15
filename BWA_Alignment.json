@@ -56,6 +56,12 @@
         "command": "Rscript /home/ckern/phantompeakqualtools/run_spp.R -c=aligned.bam -rf -out=spp_stats.txt",
         "depends": "aligned.bam",
         "produces": "spp_stats.txt"
+    },
+    {
+        "name": "Finishing QC Metrics",
+        "command": "awk 'BEGIN{{OFS=\"\\t\"}}{{print \"Fragment Length:\\t\"$3\"\\nNSC:\\t\"$9\"\\nRSC:\\t\"$10\"\\nQuality Tag:\\t\"$11\"\\n\"}}' spp_stats.txt > qc_metrics2.txt",
+        "depends": "spp_stats.txt",
+        "produces": "qc_metrics2.txt"
     }
     ]
 }
