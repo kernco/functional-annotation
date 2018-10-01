@@ -1,0 +1,35 @@
+__default__:
+  partition: "high,med"
+  nodes: 1
+  cpus: "{threads}"
+  name: "{rule}.{wildcards}"
+  output: "Logs/{rule}.{wildcards}.out"
+  time: "2-0"
+
+bwa_mem_paired:
+  partition: "bigmemh,bigmemm"
+  
+mark_duplicates:
+  partition: "bigmemh,bigmemm"
+
+star_index:
+  partition: "bigmemh,bigmemm"
+
+star_align:
+  partition: "bigmemh,bigmemm"
+
+plot_heatmap:
+  partition: "bigmemh,bigmemm"
+
+plot_heatmap_ref:
+  partition: "bigmemh,bigmemm"
+
+plot_heatmap_clust:
+  partition: "bigmemh,bigmemm"
+
+allele_specific_binding:
+  partition: "bigmemh,bigmemm"
+
+gatk_haplotype:
+  partition: "bigmemh,bigmemm"
+  time: "7-0"

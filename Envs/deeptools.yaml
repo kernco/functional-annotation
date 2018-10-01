@@ -1,0 +1,7 @@
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - deeptools=3.0.1
+  - datrie=0.7.1

@@ -1,0 +1,9 @@
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - goatools =0.7.11
+  - scikit-learn
+  - matplotlib
+  - goatools
