@@ -16,8 +16,9 @@ else:
 with open(snakemake.input.clusters) as f:
     for line in f:
         cols = line.strip().split()
+        cluster = chr(int(cols[3]) + 65)
         if int(cols[-1]) <= max_dist and int(cols[-1]) >= min_dist:
-            genes[cols[3]].add(cols[7])
+            genes[cluster].add(cols[7])
             background.add(cols[7])
 
 obodag = GODag("go-basic.obo")

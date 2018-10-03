@@ -21,7 +21,7 @@ for k, v in segments.items():
     scores = collections.defaultdict(list)
     for tissue in sorted(snakemake.config['tissues']):
         try:
-            with open('ChromHMM/Model_Joint_Reads_{states}/POSTERIOR/{tissue}_{states}_{chrom}_posterior.txt'.format(tissue=tissue, states=snakemake.wildcards.states, chrom=k)) as f:
+            with open('ChromHMM/Model_{scope}_{type}_{states}/POSTERIOR/{tissue}_{states}_{chrom}_posterior.txt'.format(scope=snakemake.wildcards.scope, type=snakemake.wildcards.type, tissue=tissue, states=snakemake.wildcards.states, chrom=k)) as f:
                 f.readline()
                 f.readline()
                 for line in f:

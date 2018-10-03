@@ -212,7 +212,7 @@ rule between_replicate_enrichment_table:
     
 def all_chromatin_annotations(wildcards):
     for tissue in config['tissues']:
-        yield 'ChromHMM/Model_{scope}_{type}_{states}/{tissue}_{states}_segments.bed'.format(states=wildcards.states, tissue=tissue)
+        yield 'ChromHMM/Model_{scope}_{type}_{states}/{tissue}_{states}_segments.bed'.format(scope=wildcards.scope, type=wildcards.type, states=wildcards.states, tissue=tissue)
 
 rule get_state_locs_for_clustering:
     input:
