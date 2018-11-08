@@ -1,5 +1,5 @@
 
-#ruleorder: call_atac_peaks > call_broad_peaks
+ruleorder: rename_atac_peaks > call_peaks
 
 def peak_call_inputs(wildcards):
     inputs = {'chip': 'Aligned_Reads/{}.tagAlign.gz'.format(wildcards.library)}
@@ -168,55 +168,24 @@ rule call_peaks:
     script: 
         '../Scripts/CallPeaks.py'
 
-#rule call_narrow_peaks:
-    #input: 
-        #unpack(peak_call_inputs)
-    #output: 
-        #'Macs2/{library}_peaks.narrowPeak' 
-    #params: 
-        #control = lambda wildcards, input: '-c ' + input.control if hasattr(input, 'control') else ''
-    #conda:
-        #'../Envs/macs.yaml'
-    #threads: 8
-    #script: 
-        #'../Scripts/CallPeaks.py'
-        #'macs2 callpeak -t {input.chip} {params.control} -f BED -n Macs2/{wildcards.library} -g {config[genomesize]} -q 0.01 -B --SPMR --keep-dup all --fix-bimodal --extsize 200 {params.scaling}'
-
-#rule call_broad_peaks:
-    #input: 
-        #unpack(peak_call_inputs)
-    #output: 
-        #'Macs2/{library}_peaks.broadPeak' 
-    #params: 
-        #control = lambda wildcards, input: '-c ' + input.control if hasattr(input, 'control') else '',
-        #scaling = get_scaling_parameter
-    #conda:
-        #'../Envs/macs.yaml'
-    #threads: 8
-    #shell: 
-        #'macs2 callpeak -t {input.chip} {params.control} -f BED -n Macs2/{wildcards.library} -g {config[genomesize]} -q 0.01 -B --SPMR --keep-dup all --fix-bimodal --extsize 200 {params.scaling}'
-
 rule call_atac_peaks:
     input: 
-        unpack(peak_call_inputs)
+        chip = 'Aligned_Reads/ATAC_{sample}.bam'
     output:
         'Macs2/ATAC_{sample}_peaks.broadPeak' 
     conda:
         '../Envs/macs.yaml'
     threads: 8
     shell:
-        'macs2 callpeak -t {input.chip} -f BAM -n Macs2/ATAC_{wildcards.library} -g {config[genomesize]} -q 0.05 --broad --nomodel --shift -100 --extsize 200'
+        'macs2 callpeak -t {input.chip} -f BAM -n Macs2/ATAC_{wildcards.sample} -g {config[genomesize]} -q 0.05 --broad --nomodel --shift -100 --extsize 200'
 
-
-#rule rename_peak_calls:
-    #input: 
-        #peak_file
-    #output: 
-        #peaks = 'Peak_Calls/{library}_Peaks.bed'
-        #pileup = 'Macs2/{library}_treat_pileup.bdg',
-        #control = 'Macs2/{library}_control_lambda.bdg'
-    #shell: 
-        #'cp {input} {output.peaks}'
+rule rename_atac_peaks:
+    input:
+        'Macs2/ATAC_{sample}_peaks.broadPeak'
+    output:
+        'Peak_Calls/ATAC_{sample}_Peaks.bed'
+    shell:
+        'cp {input} {output}'
 
 rule fold_enrichment:
     input: 
