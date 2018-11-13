@@ -1,0 +1,15 @@
+tissues: [Liver, Lung, Spleen, Cerebellum, Cortex, Hypothalamus, Muscle, Adipose]
+reps: [M08, M22]
+narrow_peaks: [H3K4me3, H3K27ac, H3K4me1, CTCF]
+broad_peaks: [H3K27me3]
+no_input: [ATAC]
+inputs: [Input]
+H3K4me3_input: Input
+H3K27me3_input: Input
+H3K4me1_input: Input
+H3K27ac_input: Input
+CTCF_input: Input
+genome: /group/zhougrp/Genomes/bosTau8/bosTau8.fa
+genomesize: 2649748499
+annotation: /group/zhougrp/Genomes/bosTau8/bosTau8_Ensembl91.gtf
+mapq: 30
