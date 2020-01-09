@@ -10,4 +10,5 @@ with open(snakemake.input.genome) as f:
 
 with open(snakemake.output.chroms, 'w') as f:
     for seq in seqs:
-        f.write("{}\t{}\n".format(seq, seqs[seq]))
+        if seq != 'chrM':
+            f.write("{}\t{}\n".format(seq, seqs[seq]))

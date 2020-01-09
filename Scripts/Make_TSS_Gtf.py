@@ -10,6 +10,7 @@ with open(snakemake.input.gtf) as f:
         try:
             if cols[2] == 'transcript':
                 gene_id = cols[-1].split(';')[0].split()[1].strip('"')
+                transcript_id = cols[-1].split(';')[1].split()[1].strip('"')
                 if cols[6] == '+':
                     tss[gene_id + " " + cols[6] + ' ' + cols[0]].append(int(cols[3]))
                 else:

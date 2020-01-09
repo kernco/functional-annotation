@@ -1,0 +1,7 @@
+library("normr")
+stats <- fromJSON(file = snakemake@input[["stats"]])
+countConfigSE <- countConfigSingleEnd(binsize = snakemake@params[["binsize"]], shift = stats$"Est. Fragment Length" / 2)
+genome <- read.table(snakemake@input[["lengths"]])
+fit <- regimeR(treatment = snakemake@input[["treatment"]], control = snakemake@input[["control"]], genome = genome, models=3, verbose=FALSE, countConfig=countConfigSE)
+summary(fit)
+exportR(fit, filename=snakemake@output[["regions"]], type="bed", fdr=snakemake@params[["fdr"]])

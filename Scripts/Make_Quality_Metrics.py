@@ -1,11 +1,11 @@
-import subprocess
 import os
+import json
 
 txtout = open(snakemake.output.txt, 'w')
 csvout = open(snakemake.output.csv, 'w')
 
-headers = ["Tissue", "Rep", "Depth", "NRF", "PBC1", "PBC2", "NSC", "RSC", "JSD", "SJSD", "IJSD"]
-txtout.write("{: >15s}{: >7s}{: >15s}{: >10s}{: >10s}{: >10s}{: >10s}{: >10s}{: >10s}{: >10s}{: >10s}\n".format(*headers))
+headers = ["Tissue", "Rep", "Depth", "EFL", "NRF", "PBC1", "PBC2", "NSC", "RSC", "JSD", "SJSD", "IJSD"]
+txtout.write("{: >15s}{: >7s}{: >15s}{: >10s}{: >10s}{: >10s}{: >10s}{: >10s}{: >10s}{: >10s}{: >10s}{: >10s}\n".format(*headers))
 csvout.write(','.join(headers) + '\n')
 
 for sample in snakemake.params.libraries:
@@ -16,16 +16,17 @@ for sample in snakemake.params.libraries:
         replicate = ' '
     output = "{: >15s}{: >7s}".format(tissue, replicate)
     data = [tissue, replicate]
-    depth = int(subprocess.check_output(["samtools", "view", "-c", "Aligned_Reads/{}.bam".format(sample)]))
-    result = subprocess.check_output("bamToBed -i Bwa_Output/{}.filtered.bam | awk 'BEGIN{{OFS=\"\t\"}}{{print $1,$2,$3,$6}}' | sort | uniq -c | awk 'BEGIN{{mt=1;m0=1;m1=1;m2=1}} ($1==1){{m1=m1+1}} ($1==2){{m2=m2+1}} {{m0=m0+1}} {{mt=mt+$1}} END{{printf \"%d\t%d\t%d\t%d\t%f\t%f\t%f\",mt,m0,m1,m2,m0/mt,m1/m0,m1/m2}}'".format(sample), shell=True)
-    metrics = result.split()
-    output += "{: >15,d}{: >10.2f}{: >10.2f}{: >10.2f}".format(depth, float(metrics[4]), float(metrics[5]), float(metrics[6]))
-    data += [depth, float(metrics[4]), float(metrics[5]), float(metrics[6])]
+    with open('Metrics/{}_Alignment_Stats.json'.format(sample)) as f:
+        stats = json.loads(f.read())
+    output += "{: >15,d}{: >10d}{: >10.2f}{: >10.2f}{: >10.2f}".format(int(stats['Final Reads']), 0, float(stats['NRF']), float(stats['PBC1']), float(stats['PBC2']))
+    data += [int(stats['Final Reads']), 0, float(stats['NRF']), float(stats['PBC1']), float(stats['PBC2'])]
     if os.path.isfile('Aligned_Reads/{}.bam'.format(sample)):
-        with open('Metrics/{}_spp_stats.txt'.format(sample)) as f:
-            sppstats = f.read().split()
-        output += "{: >10.2f}{: >10.2f}".format(float(sppstats[8]), float(sppstats[9]))
-        data += [float(sppstats[8]), float(sppstats[9])]
+        try:
+            output += "{: >10.2f}{: >10.2f}".format(float(stats['NSC']), float(stats['RSC']))
+            data += [float(stats['NSC']), float(stats['RSC'])]
+        except KeyError:
+            output += "{: >10.2f}{: >10.2f}".format(0, 0)
+            data += [0, 0]
         with open('Metrics/{}_DeepTools_Metrics.txt'.format(sample)) as f:
             lines = f.readlines()
             chipstats = lines[1].split()

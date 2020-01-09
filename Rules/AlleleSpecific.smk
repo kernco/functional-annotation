@@ -108,7 +108,7 @@ rule create_baal_sample_sheet:
 rule filter_snps:
     input:
         bed = 'Allele_Specific/{file}.bed',
-        peaks = expand('Peak_Calls/{assay}_{tissue}_Combined_Peaks.bed', assay=assay, tissue=config['tissues'])
+        peaks = lambda wildcards: expand('Peak_Calls/{assay}_{tissue}_Combined_Peaks.bed', assay=wildcards.assay, tissue=config['tissues'])
     output:
         'Allele_Specific/{file}_{assay}.bed'
     conda:

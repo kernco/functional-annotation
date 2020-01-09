@@ -4,50 +4,41 @@ from sklearn import metrics
 import sys
 #import math
 
-def load_tpms(filename):
-    tpms = {}
+def load_data(filename):
+    data = []
     with open(filename) as f:
-        f.readline()
         for line in f:
-            cols = line.strip().split()
-            tpms[cols[0]] = float(cols[-1])
-    return tpms
+            cols = line.strip().split('\t')
+            data.append((float(cols[0]), 1 if cols[1] == "True" else 0))
+    return data
 
-reps = []
-for filename in sys.argv[2:]:
-    reps.append(load_tpms(filename))
+hcp_k4me3 = load_data(sys.argv[1])
+hcp_k27ac = load_data(sys.argv[2])
+lcp_k4me3 = load_data(sys.argv[3])
+lcp_k27ac = load_data(sys.argv[4])
 
-gene_lists = defaultdict(list)
-with open(sys.argv[1]) as f:
-    for line in f:
-        cols = line.split('\t')
-        gene_id = cols[3]
-        state = int(cols[9])
-        gene_lists[state].append(gene_id)
+def plot_curve(data, name):
+    fpr, tpr, thresholds = metrics.roc_curve([x[1] for x in data], [x[0] for x in data], pos_label=1)
+    auc = metrics.auc(fpr, tpr)
+    #predscore += len(gene_lists[state]) * abs(auc - 0.5) * 2
+    #predtotal += len(gene_lists[state])
+    plt.plot(fpr, tpr, label='{} (area = {:0.2f})'.format(name, auc))
 
 #ROC
 fig = plt.figure(figsize=(8,8), dpi=100)
-predscore = 0
-predtotal = 0
-for state in reversed(sorted(gene_lists)):
-    data = []
-    for tpm in reps:
-        for gene_id in tpm:
-            if tpm[gene_id] > 0:
-                data.append((tpm[gene_id], 1 if gene_id in gene_lists[state] else 0))
-    scores, preds = zip(*sorted(data))
-    fpr, tpr, thresholds = metrics.roc_curve(preds, scores, pos_label=1)
-    auc = metrics.auc(fpr, tpr)
-    predscore += len(gene_lists[state]) * abs(auc - 0.5) * 2
-    predtotal += len(gene_lists[state])
-    plt.plot(fpr, tpr, label='State {} (area = {:0.2f})'.format(state, auc))
+#predscore = 0
+#predtotal = 0
+plot_curve(hcp_k4me3, "HCPs w/H3K4me3")
+plot_curve(hcp_k27ac, "HCPs w/H3K27ac")
+plot_curve(lcp_k4me3, "LCPs w/H3K4me3")
+plot_curve(lcp_k27ac, "LCPs w/H3K27ac")
 plt.plot([0, 1], [0, 1], 'k--')
 plt.xlim([0.0, 1.0])
 plt.ylim([0.0, 1.05])
 plt.xlabel("False Positive Rate")
 plt.ylabel("True Positive Rate")
 plt.legend(loc="best", prop={'size': 10})
-plt.title("{}".format(predscore / predtotal))
+#plt.title("{}".format(predscore / predtotal))
 fig.savefig('test.png', bbox_inches='tight')
 plt.close(fig)
 

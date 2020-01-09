@@ -3,5 +3,5 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - deeptools=3.0.1
+  - deeptools=3.3.0-0
   - datrie=0.7.1

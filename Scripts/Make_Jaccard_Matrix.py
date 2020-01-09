@@ -11,8 +11,12 @@ for peaks1 in snakemake.input.peaks:
             jaccard = result.split('\n')[1].split()[2]
         except IndexError:
             jaccard = '0'
-        library1 = '_'.join('_'.join(os.path.basename(peaks1).split('.')[:-1]).split('_')[1:])
-        library2 = '_'.join('_'.join(os.path.basename(peaks2).split('.')[:-1]).split('_')[1:])
+        if snakemake.params.hide_assay:
+            library1 = '_'.join('_'.join(os.path.basename(peaks1).split('.')[:-1]).split('_')[1:])
+            library2 = '_'.join('_'.join(os.path.basename(peaks2).split('.')[:-1]).split('_')[1:])
+        else:
+            library1 = '_'.join('_'.join(os.path.basename(peaks1).split('.')[:-1]).split('_'))
+            library2 = '_'.join('_'.join(os.path.basename(peaks2).split('.')[:-1]).split('_'))
         matrix[library1][library2] = jaccard
 
 keys = sorted(matrix.keys())

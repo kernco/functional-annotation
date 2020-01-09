@@ -21,7 +21,10 @@ with open(snakemake.input.chromsizes) as f:
 
 with open(snakemake.output.bed, 'w') as outfile:
     for tpm, chrom, tss in reversed(sorted(data)):
-        if int(tss) - 3000 <= 0 or int(tss) + 3000 >= chromsizes[chrom]:
+        try:
+            if int(tss) - 3000 <= 0 or int(tss) + 3000 >= chromsizes[chrom]:
+                continue
+        except KeyError:
             continue
         outfile.write("{}\t{}\t{}\n".format(chrom, tss, int(tss) + 1))
 

@@ -1,53 +1,36 @@
-
-#def model_inputs(wildcards):
-    #for assay in PEAK_ASSAYS:
-        #if wildcards.type == 'Reads':
-            #for library in libraries(assay=assay):
-                #if wildcards.type == 'Reads':
-                    #yield 'Aligned_Reads/{library}.tagAlign.gz'.format(library=library)
-                    #if control_library(library, format='tagAlign'):
-                        #yield control_library(library, format='tagAlign')
-        #elif wildcards.type == 'Bed':
-            #for tissue in tissues_for_assay(assay):
-                #yield 'Peak_Calls/{assay}_{tissue}_Combined_Peaks.bed'.format(assay=assay, tissue=tissue)
-        #elif wildcards.type == 'IDR':
-            #for tissue in tissues_for_assay(assay):
-                #yield 'Peak_Calls/{assay}_{tissue}_IDR.{peaktype}Peak'.format(assay=assay, tissue=tissue, peaktype=peak_type(assay))
-#
-#def individual_model_inputs(wildcards):
-    #for assay in PEAK_ASSAYS:
-        #for library in libraries(assay=assay,tissue=wildcards.tissue):
-            #yield 'Aligned_Reads/{library}.tagAlign.gz'.format(library=library)
-            #if control_library(library, format='tagAlign'):
-                #yield control_library(library, format='tagAlign')
-    
-
-#def training_inputs(wildcards):
-    #for data in model_inputs(wildcards):
-        #if data not in config['ChromHMM_omit_training']:
-            #yield data
-
 def model_inputs(wildcards):
     if wildcards.tissue == 'Joint':
         wildcards.tissue = None
     for library in libraries(skip_input=False, tissue=wildcards.tissue):
         assay, tissue, rep = library.split("_")
-        if assay in PEAK_ASSAYS or assay in config['inputs']:# and (assay not in config['no_input'] or wildcards.type=='InputTrack'): 
+        if wildcards.type == 'PeakCalls':
+            if assay in config['ChromHMM_assays']:
+                yield 'Peak_Calls/{assay}_{tissue}_Combined_Peaks.bed'.format(assay=assay, tissue=tissue)
+        elif wildcards.type == 'NormR':
+            if assay in config['ChromHMM_assays']:
+                yield 'Enriched_Regions/{assay}_{tissue}_Combined.bed'.format(assay=assay, tissue=tissue)
+        elif assay in config['ChromHMM_assays'] or assay in config['inputs']:
             yield 'Aligned_Reads/{library}.tagAlign.gz'.format(library=library)
-        #elif assay in config['inputs']:
-            #yield 'Aligned_Reads/{library}.tagAlign.gz'.format(library=library)
+
+def normr_table_inputs(wildcards):
+    for library in libraries(assay=wildcards.assay):
+        assay, tissue, rep = library.split("_")
+        if assay in config['ChromHMM_assays']:
+            yield 'Enriched_Regions/{assay}_{tissue}_Combined.bed'.format(assay=assay, tissue=tissue)
 
 def model_replicate_inputs(wildcards):
     for library in libraries(tissue=wildcards.tissue, rep=wildcards.rep):
         assay, tissue, rep = library.split("_")
-        if assay in PEAK_ASSAYS or assay in config['inputs']:# and (assay not in config['no_input'] or wildcards.type=='InputTrack'): 
+        if assay in config['ChromHMM_assays'] or assay in config['inputs']:# and (assay not in config['no_input'] or wildcards.type=='InputTrack'): 
             yield 'Aligned_Reads/{library}.tagAlign.gz'.format(library=library)
         #elif assay in config['inputs']:
             #yield 'Aligned_Reads/{library}.tagAlign.gz'.format(library=library)
 
 wildcard_constraints:
     states = "[0-9]+",
-    sample = "[^_]+_[^_]+"
+    state = "E[0-9]+",
+    sample = "[^_]+_[^_]+",
+    prefix = "[^_]+_[^_]+"
 
 ################
 # Create Model #
@@ -64,19 +47,30 @@ rule tissue_marks:
     output:
         marks = 'ChromHMM/Tissue_Marks_{tissue}_{type}.txt'
     run:
+        done = set()
         with open(output.marks, 'w') as f:
             if wildcards.tissue == 'Joint':
                 wildcards.tissue = None
             for library in libraries(skip_input=False, tissue=wildcards.tissue):
+                if library in config['bad_libraries']:
+                    continue
                 assay, tissue, rep = library.split("_")
                 if wildcards.type == 'NormInput':
-                    if assay in PEAK_ASSAYS:# and assay not in config['no_input']: 
+                    if assay in config['ChromHMM_assays']:# and assay not in config['no_input']: 
                         f.write("{tissue}\t{assay}\tAligned_Reads/{library}.tagAlign.gz\t{control}\n".format(tissue=tissue, assay=assay, library=library, control=control_library(library, format='tagAlign')))
                 elif wildcards.type == 'InputTrack':
-                    if assay in PEAK_ASSAYS and assay not in config['inputs']:
+                    if assay in config['ChromHMM_assays'] and assay not in config['inputs']:
                         f.write("{tissue}\t{assay}\tAligned_Reads/{library}.tagAlign.gz\n".format(tissue=tissue, assay=assay, library=library))
                     elif assay in config['inputs']:
                         f.write("{tissue}\tControl\tAligned_Reads/{library}.tagAlign.gz\n".format(tissue=tissue, library=library))
+                elif wildcards.type == 'PeakCalls':
+                    if assay in config['ChromHMM_assays'] and tissue+assay not in done:
+                        done.add(tissue+assay)
+                        f.write('{tissue}\t{assay}\tPeak_Calls/{assay}_{tissue}_Combined_Peaks.bed\n'.format(tissue=tissue, assay=assay))
+                elif wildcards.type == 'NormR':
+                    if assay in config['ChromHMM_assays'] and tissue+assay not in done:
+                        done.add(tissue+assay)
+                        f.write('{tissue}\t{assay}\tEnriched_Regions/{assay}_{tissue}_Combined.bed\n'.format(tissue=tissue, assay=assay))
 
 rule replicate_marks:
     output:
@@ -86,7 +80,7 @@ rule replicate_marks:
             for library in libraries(tissue=wildcards.tissue, rep=wildcards.rep):
                 assay, tissue, rep = library.split("_")
                 if wildcards.type == 'NormInput':
-                    if assay in PEAK_ASSAYS:# and assay not in config['no_input']:
+                    if assay in config['ChromHMM_assays']:# and assay not in config['no_input']:
                         f.write("{tissue}_{rep}\t{assay}\tAligned_Reads/{library}.tagAlign.gz\t{control}\n".format(tissue=tissue, rep=rep, assay=assay, library=library, control=control_library(library, format='tagAlign')))
                 elif wildcards.type == 'InputTrack':
                     if assay not in config['inputs']:
@@ -94,6 +88,124 @@ rule replicate_marks:
                     elif assay in config['inputs']:
                         f.write("{tissue}_{rep}\tControl\tAligned_Reads/{library}.tagAlign.gz\n".format(tissue=tissue, library=library, rep=rep))
                     
+rule normr_enrichment:
+    input:
+        treatment = 'Aligned_Reads/{library}.bam',
+        control = lambda wildcards: control_library("{library}".format(library=wildcards.library)),
+        lengths = 'ChromHMM/Chromosome_Lengths.txt'
+    output:
+        regions = 'Enriched_Regions/{library}.bed'
+    params:
+        binsize = 200,
+        fdr = 0.05
+    conda:
+        '../Envs/normr.yaml'
+    script:
+        '../Scripts/NormR_Enriched_Regions.R'
+
+#rule merge_bams:
+    ##input:
+        #bams = lambda wildcards: expand('Aligned_Reads/{library}.bam', library=libraries(assay=wildcards.assay, tissue=wildcards.tissue, skip_input=False))
+    #output:
+        #'Aligned_Reads/{assay}_{tissue}_Merged.bam'
+    #conda:
+        #'../Envs/samtools.yaml'
+    #threads: 8
+    #shell:
+        #'samtools merge -@{threads} {output} {input} && samtools index {output}'
+
+rule treatment_counts:
+    input:
+        reads = lambda wildcards: expand('Aligned_Reads/{library}.tagAlign.gz', library=libraries(assay=wildcards.assay, tissue=wildcards.tissue)),
+        stats = lambda wildcards: expand('Metrics/{library}_Alignment_Stats.json', library=libraries(assay=wildcards.assay, tissue=wildcards.tissue)),
+        chromlens = 'ChromHMM/Chromosome_Lengths.txt'
+    output:
+        counts = 'Enriched_Regions/{assay}_{tissue}_BinCounts.txt'
+    script:
+        '../Scripts/Count_Reads_Per_Bin.py'
+
+rule control_counts:
+    input:
+        reads = lambda wildcards: [control_library(x, format='tagAlign') for x in libraries(assay=wildcards.assay, tissue=wildcards.tissue)],
+        stats = lambda wildcards: expand('Metrics/{library}_Alignment_Stats.json', library=[control_library(x, format='basename') for x in libraries(assay=wildcards.assay, tissue=wildcards.tissue)]),
+        chromlens = 'ChromHMM/Chromosome_Lengths.txt'
+    output:
+        counts = 'Enriched_Regions/{assay}_{tissue}_Control_BinCounts.txt'
+    script:
+        '../Scripts/Count_Reads_Per_Bin.py'
+
+rule merged_regimer:
+    input:
+        treatment = 'Enriched_Regions/{assay}_{tissue}_BinCounts.txt',
+        control = 'Enriched_Regions/{assay}_{tissue}_Control_BinCounts.txt',
+        lengths = 'ChromHMM/Chromosome_Lengths.txt',
+    output:
+        regions = 'Enriched_Regions/{assay}_{tissue}_Regimes.bed'
+    params:
+        binsize = 200,
+        fdr = 0.05
+    #conda:
+        #'../Envs/normr.yaml'
+    script:
+        '../Scripts/RegimeR_Merged.R'
+
+rule regimer_enrichment:
+    input:
+        treatment = 'Aligned_Reads/{library}.bam',
+        control = lambda wildcards: control_library("{library}".format(library=wildcards.library)),
+        lengths = 'ChromHMM/Chromosome_Lengths.txt',
+        stats = 'Metrics/{library}_Alignment_Stats.json'
+    output:
+        regions = 'Enriched_Regions/{library}_Regimes.bed'
+    params:
+        binsize = 200,
+        fdr = 0.05
+    conda:
+        '../Envs/normr.yaml'
+    script:
+        '../Scripts/RegimeR_Enriched_Regions.R'
+
+rule split_regimer:
+    input:
+        infile = 'Enriched_Regions/{root}_Regimes.bed'
+    output:
+        outfile = 'Enriched_Regions/{root}_Regime{regime}.bed',
+    script:
+        '../Scripts/Split_Regime.py'
+
+rule combine_regimer:
+    input:
+        regime1 = lambda wildcards: expand('Enriched_Regions/{library}_Regime1.bed', library=libraries(assay=wildcards.assay, tissue=wildcards.tissue)),
+        regime2 = lambda wildcards: expand('Enriched_Regions/{library}_Regime2.bed', library=libraries(assay=wildcards.assay, tissue=wildcards.tissue)),
+        merged1 = 'Enriched_Regions/{assay}_{tissue}_Merged_Regime1.bed',
+        merged2 = 'Enriched_Regions/{assay}_{tissue}_Merged_Regime2.bed'
+    output:
+        combinereg1 = "Enriched_Regions/{assay}_{tissue}_Combined_Regime1.bed",
+        combinereg2 = "Enriched_Regions/{assay}_{tissue}_Combined_Regime2.bed"
+    script:
+        '../Scripts/Combine_Regime_Replicates.py'
+
+rule combine_normr:
+    input:
+        lambda wildcards: expand('Enriched_Regions/{library}.bed', library=libraries(assay=wildcards.assay, tissue=wildcards.tissue))
+    output:
+        regions = 'Enriched_Regions/{assay}_{tissue}_Combined.bed'
+    conda:
+        '../Envs/bedtools.yaml'
+    shell:
+        'bedtools intersect -a {input[0]} -b {input[1]} -u | bedtools merge -i stdin > {output}'
+
+rule normr_summary_table:
+    input:
+        inputs = normr_table_inputs
+    output:
+        'Tables/{assay}_NormR_Summary.csv'
+    params: 
+        tissues = lambda wildcards: list(LIBRARIES[wildcards.assay].keys()), 
+        reps = lambda wildcards: replicates_for_assay(wildcards.assay)
+    script:
+        '../Scripts/NormR_Summary_Table.py'
+
 rule binarize_data:
     input:
         chroms = 'ChromHMM/Chromosome_Lengths.txt',
@@ -101,8 +213,11 @@ rule binarize_data:
         inputs = model_inputs
     output:
         directory('ChromHMM/Binarized_Data_{tissue}_{type}')
+    params:
+        peaks = lambda wildcards: '-peaks' if wildcards.type in ['PeakCalls', 'NormR'] else ''
+    threads: 12
     shell:
-        'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar BinarizeBed {input.chroms} . {input.marks} {output}'
+        'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar BinarizeBed {params.peaks} {input.chroms} . {input.marks} {output}'
 
 rule binarize_replicate:
     input:
@@ -110,7 +225,8 @@ rule binarize_replicate:
         marks = 'ChromHMM/Replicate_Marks_{tissue}_{rep}_{type}.txt',
         inputs = model_replicate_inputs
     output:
-        directory('ChromHMM/Binarized_Replicate_{tissue}_{rep}_{type}')
+        'ChromHMM/Binarized_Replicate_{tissue}_{rep}_{type}'
+    threads: 12
     shell:
         'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar BinarizeBed {input.chroms} . {input.marks} {output}'
         
@@ -123,9 +239,9 @@ rule learn_model:
         emissions = 'ChromHMM/Model_{tissue}_{type}_{states}/emissions_{states}.txt'
     params:
         outdir = 'ChromHMM/Model_{tissue}_{type}_{states}'
-    threads: 24
+    threads: 12
     shell:
-        'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar LearnModel -printposterior -r 300 -p {threads} -l {input.chroms} {input.bindir} {params.outdir} {wildcards.states} {config[ChromHMM_genome]}'
+        'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar LearnModel -printposterior -p {threads} -l {input.chroms} {input.bindir} {params.outdir} {wildcards.states} {config[ChromHMM_genome]}'
         
 rule replicate_segmentation:
     input:
@@ -136,13 +252,83 @@ rule replicate_segmentation:
         modeldir = 'ChromHMM/Model_Joint_{type}_{states}'
     output:
         'ChromHMM/Model_Joint_{type}_{states}/{tissue}_{rep}_{states}_segments.bed'
+    threads: 12
     shell:
         'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar MakeSegmentation -printposterior {input.model} {input.bindir} {input.modeldir}'
         
 
+rule split_states:
+    input:
+        'ChromHMM/{model}/{prefix}_segments.bed'
+    output:
+        'ChromHMM/{model}/{prefix}_{state}.bed'
+    shell:
+        'grep {wildcards.state}$ {input} > {output}'
+
+def tissue_specific_inputs(wildcards):
+    maintissue, states = wildcards.prefix.split('_')
+    inputs = []
+    for tissue in config['ChromHMM_tissues']:
+        if tissue != maintissue:
+            inputs.append('{model}/{tissue}_{states}_{state}.bed'.format(model=wildcards.model, tissue=tissue, states=states, state=wildcards.state))
+            if hasattr(wildcards, 'more'):
+                more = wildcards.more.split('E')[1:]
+                for s in more:
+                    inputs.append('{model}/{tissue}_{states}_{state}.bed'.format(model=wildcards.model, tissue=tissue, states=states, state='E' + s))
+    return inputs
+    
+rule tissue_specific_state:
+    input:
+        specific = '{model}/{prefix}_{state}.bed',
+        others = tissue_specific_inputs
+    output:
+        '{model}/{prefix}_Specific_{state}.bed'
+    shell:
+        'bedtools intersect -a {input.specific} -b {input.others} -v > {output}'
+
+rule tissue_specific_state_alternate:
+    input:
+        specific = '{model}/{prefix}_{state}.bed',
+        others = tissue_specific_inputs
+    output:
+        '{model}/{prefix}_Specific_{state}-{more}.bed'
+    shell:
+        'bedtools intersect -a {input.specific} -b {input.others} -v > {output}'
+        
+rule get_segment_seqs:
+    input:
+        bed = '{model}/{spec}_{suffix}.bed',
+        genome = lambda wildcards: genomes['{}'.format(wildcards.spec)]
+    output:
+        '{model}/{spec}_{suffix}.fa'
+    shell:
+        'bedtools getfasta -fi {input.genome} -bed {input.bed} > {output}'
+
 ##################
 # Evaluate Model #
 ##################
+
+rule create_tissue_models:
+    input:
+        models = lambda wildcards: expand('ChromHMM/Model_{tissue}_{type}_{states}/emissions_{states}.txt', tissue=config['tissues'], type=wildcards.type, states=wildcards.states)
+    output:
+        modeldir = 'ChromHMM/Tissue_Models_{type}_{states}'
+    run:
+        shell('mkdir -p {}'.format(output.modeldir))
+        for model in input.models:
+            tissue = model.split('_')[1]
+            shell('cp {} {}/emissions_{tissue}.txt'.format(model, output.modeldir, tissue=tissue))
+        
+rule test_num_states:
+    input:
+        testmodel = 'ChromHMM/Model_Joint_{type}_{states}/emissions_{states}.txt',
+        tissuemodels = 'ChromHMM/Tissue_Models_{type}_{states}'
+    output:
+        txt = 'ChromHMM/Correlation_Tests/{type}_{states}_Comparison.txt'
+    params:
+        prefix = 'ChromHMM/Correlation_Tests/{type}_{states}_Comparison'
+    shell:
+        'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar CompareModels {input.testmodel} {input.tissuemodels} {params.prefix}'
 
 rule pairwise_overlap:
     input:
@@ -212,7 +398,15 @@ rule between_replicate_enrichment_table:
     
 def all_chromatin_annotations(wildcards):
     for tissue in config['tissues']:
-        yield 'ChromHMM/Model_{scope}_{type}_{states}/{tissue}_{states}_segments.bed'.format(scope=wildcards.scope, type=wildcards.type, states=wildcards.states, tissue=tissue)
+        yield 'ChromHMM/Model_{scope}_{type}_{states}/{tissue}_{states}_200bp_segments.bed'.format(scope=wildcards.scope, type=wildcards.type, states=wildcards.states, tissue=tissue)
+
+rule chunk_chromatin_annotation:
+    input:
+        infile = 'ChromHMM/Model_{scope}_{type}_{states}/{tissue}_{states}_segments.bed'
+    output:
+        outfile = 'ChromHMM/Model_{scope}_{type}_{states}/{tissue}_{states}_200bp_segments.bed'
+    script:
+        '../Scripts/Chunk_Bed.py'
 
 rule get_state_locs_for_clustering:
     input:
@@ -222,7 +416,7 @@ rule get_state_locs_for_clustering:
     conda:
         '../Envs/bedtools.yaml'
     shell:
-        'rm -f temp temp2; for file in {input.segments}; do grep {wildcards.state} $file | cut -f1,2,3 >> temp; done; sort -k1,1 -k2,2n temp > temp2;'
+        """rm -f temp temp2; for file in {input.segments}; do grep {wildcards.state} $file | awk -v OFS="\\t" '{{print $1, $2+1, $3}}' >> temp; done; sort -k1,1 -k2,2n temp > temp2; """
         'bedtools merge -i temp2 > {output.bed}; rm -f temp temp2'
         
 rule cluster_states:
@@ -233,6 +427,7 @@ rule cluster_states:
         png = 'ChromHMM/Model_{scope}_{type}_{states}/State_{state}_Clusters_Heatmap.png'
     conda:
         '../Envs/python.yaml'
+    threads: 48
     script:
         '../Scripts/Cluster_Chromatin_States.py'
 

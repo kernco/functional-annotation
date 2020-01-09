@@ -1,10 +1,8 @@
 channels:
   - bioconda
   - conda-forge
-  - defaults
 dependencies:
   - r-gplots
-  - r-rcolorbrewer =1.1_2
-  - r-catools =1.17.1
-  - r-spp =1.15.2
-  - bioconductor-baalchip =1.4.0
+  - r-rcolorbrewer
+  - r-catools
+  - r-spp

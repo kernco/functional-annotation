@@ -1,7 +1,8 @@
 import sys
 import collections
 import numpy
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, DBSCAN#, OPTICS
+from sklearn.neighbors import NearestNeighbors
 import matplotlib.pyplot as plt
 
 #arg1 = state locations
@@ -39,11 +40,16 @@ for k, v in segments.items():
             locs.append([k, segment])
 
 array = numpy.array(data)
-kmeans = KMeans(n_clusters=16, random_state=0).fit(array)
+#kmeans = KMeans(n_clusters=24, random_state=0).fit(array)
+#neigh = NearestNeighbors(radius=1.6)
+#neigh.fit(array)
+#graph = neigh.radius_neighbors_graph(array, mode='distance')
+kmeans = DBSCAN(min_samples=25, algorithm='ball_tree', metric='euclidean').fit(array)
 clusters = collections.defaultdict(list)
 outfile = open(snakemake.output.txt, 'w')
 for label, scores, loc in zip(kmeans.labels_, data, locs):
-    clusters[label].append(scores)
+    if label >= 0:
+        clusters[label].append(scores)
     outfile.write('\t'.join([loc[0], loc[1], str(int(loc[1]) + 1)] + [str(label)]) + '\n')
 
 f, axarr = plt.subplots(figsize=(4,8), nrows=len(clusters), gridspec_kw=dict(height_ratios=[len(c) for c in clusters.values()]))

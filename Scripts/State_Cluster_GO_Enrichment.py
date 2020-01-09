@@ -23,12 +23,12 @@ with open(snakemake.input.clusters) as f:
 
 obodag = GODag("go-basic.obo")
 id2go = read_associations("sym2go.txt")
-goeaobj = GOEnrichmentStudy(background, id2go, obodag, propagate_counts=False, alpha=0.05, methods=['fdr_bh'])
+goeaobj = GOEnrichmentStudy(background, id2go, obodag, propagate_counts=True, alpha=0.05)
 outfile = open(snakemake.output.txt, 'w')
 for cluster, geneids in sorted(genes.items()):
     outfile.write("Cluster {}\n".format(cluster))
     goea_results_all = goeaobj.run_study(geneids)
-    for fdr, name, enrichment in sorted([(r.p_fdr_bh, r.name, r.enrichment) for r in goea_results_all if r.p_fdr_bh < 0.2]):
+    for fdr, name, enrichment in sorted([(r.p_uncorrected, r.name, r.enrichment) for r in goea_results_all if r.p_sidak < 0.05]):
         outfile.write("\t{}\t{}\t{}\n".format(name, fdr, enrichment))
     outfile.write("\n")
     #GOEnrichmentStudy.print_summary(goea_results_sig)

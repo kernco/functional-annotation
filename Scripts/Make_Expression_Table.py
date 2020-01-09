@@ -5,11 +5,11 @@ with open(snakemake.input.gtf) as f:
         if line.startswith('#'):
             continue
         cols = line.split('\t')
-        if cols[2] == 'transcript':
+        if cols[2] == 'gene':
             tags = [x.split() for x in cols[-1].split(';')]
             tags = dict([(x[0], x[1]) for x in tags if x])
-            if 'ref_gene_id' in tags:
-                refs[tags["gene_id"].strip('"')] = tags["ref_gene_id"].strip('"')
+            if 'gene_name' in tags:
+                refs[tags["gene_id"].strip('"')] = tags["gene_name"].strip('"')
             else:
                 refs[tags["gene_id"].strip('"')] = '-'
 
@@ -27,7 +27,7 @@ for filename in snakemake.input.tabs:
 with open(snakemake.output.tsv, 'w') as outfile:
     outfile.write("GeneID\tRefID\t")
     for filename in snakemake.input.tabs:
-        header = "_".join(filename.split("_")[1:-1])
+        header = "_".join(filename.split("_")[1:3])
         outfile.write(header + "\t")
     outfile.write("\n")
     for gene in sorted(genes):
