@@ -300,6 +300,8 @@ rule tissue_specific_state_alternate:
         others = tissue_specific_inputs
     output:
         '{model}/{prefix}_Specific_{state}-{more}.bed'
+    conda:
+        '../Envs/bedtools.yaml'
     shell:
         'bedtools intersect -a {input.specific} -b {input.others} -v > {output}'
         
@@ -309,6 +311,8 @@ rule get_segment_seqs:
         genome = lambda wildcards: genomes['{}'.format(wildcards.spec)]
     output:
         '{model}/{spec}_{suffix}.fa'
+    conda:
+        '../Envs/bedtools.yaml'
     shell:
         'bedtools getfasta -fi {input.genome} -bed {input.bed} > {output}'
 
@@ -514,6 +518,8 @@ rule assign_states_to_tss:
         overlap = 'ChromHMM/Model_{scope}_{type}_{states}/{tissue}_TSS_states.txt'
     params:
         segments = lambda wildcards: 'ChromHMM/Model_{scope}_{type}_{states}/{tissue}_{states}_dense.bed'.format(type=wildcards.type, scope=wildcards.scope, states=wildcards.states, tissue=wildcards.tissue)
+    conda:
+        '../Envs/bedtools.yaml'
     shell:
         'bedtools intersect -a {input.tss} -b {params.segments} -wa -wb > {output.overlap}'
 
