@@ -76,8 +76,10 @@ rule NarrowPeak_BigBed:
         chromsizes = config['chromsizes']
     output:
         'Track_Hub/{assay}_{tissue}_Combined_Peaks.bigBed'
+    conda:
+        '../Env/bdg2bw.yaml'
     shell:
-        '/home/ckern/bin/bedToBigBed -type=bed4+1 {input} {output}'
+        'bedToBigBed -type=bed4+1 {input} {output}'
 
 rule BroadPeak_BigBed:
     input:
@@ -85,8 +87,10 @@ rule BroadPeak_BigBed:
         chromsizes = config['chromsizes']
     output:
         'Track_Hub/{assay}_{tissue}_Broad.bigBed'
+    conda:
+        '../Env/bdg2bw.yaml'
     shell:
-        '/home/ckern/bin/bedToBigBed -type=bed4+5 {input} {output}'
+        'bedToBigBed -type=bed4+5 {input} {output}'
 
 rule Temp_Peak_File:
     input:
@@ -107,8 +111,10 @@ rule RepPeak_BigBed:
         chromsizes = config['chromsizes']
     output:
         'Track_Hub/{library}_Peaks.bigBed'
+    conda:
+        '../Env/bdg2bw.yaml'
     shell:
-        '/home/ckern/bin/bedToBigBed -type=bed4 {input} {output}'
+        'bedToBigBed -type=bed4 {input} {output}'
 
 rule Segmentation_Dense_BigBed:
     input:
