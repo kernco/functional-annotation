@@ -7,7 +7,7 @@ rule Trim_Bedgraph:
     conda:
         '../Envs/bdg2bw.yaml'
     shell:
-        'bedtools slop -i {input.bdg} -g {input.chromsizes} -b 0 | /home/ckern/bin/bedClip stdin {input.chromsizes} {output}'
+        'bedtools slop -i {input.bdg} -g {input.chromsizes} -b 0 | bedClip stdin {input.chromsizes} {output}'
 
 rule FoldEnrichment_BigWig:
     input:
@@ -102,7 +102,7 @@ rule Temp_Peak_File:
         '../Envs/bdg2bw.yaml'
     shell:
         'grep -v chrM {input.peaks} | cut -f1,2,3,4 > {input.peaks}.temp &&'
-        'bedtools slop -i {input.peaks}.temp -g {input.chromsizes} -b 0 | /home/ckern/bin/bedClip stdin {input.chromsizes} {output} &&'
+        'bedtools slop -i {input.peaks}.temp -g {input.chromsizes} -b 0 | bedClip stdin {input.chromsizes} {output} &&'
         'rm {input.peaks}.temp'
 
 rule RepPeak_BigBed:
