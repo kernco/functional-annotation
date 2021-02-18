@@ -6,3 +6,4 @@ dependencies:
   - bedtools=2.27.1
   - ucsc-bedclip
   - ucsc-bedgraphtobigwig
+  - ucsc-bedtobigbed

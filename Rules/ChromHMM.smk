@@ -213,11 +213,13 @@ rule binarize_data:
         inputs = model_inputs
     output:
         directory('ChromHMM/Binarized_Data_{tissue}_{type}')
+    conda:
+        '../Envs/chromHMM.yaml'
     params:
         peaks = lambda wildcards: '-peaks' if wildcards.type in ['PeakCalls', 'NormR'] else ''
     threads: 12
     shell:
-        'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar BinarizeBed {params.peaks} {input.chroms} . {input.marks} {output}'
+        'ChromHMM.sh BinarizeBed {params.peaks} {input.chroms} . {input.marks} {output}'
 
 rule binarize_replicate:
     input:
@@ -226,9 +228,11 @@ rule binarize_replicate:
         inputs = model_replicate_inputs
     output:
         'ChromHMM/Binarized_Replicate_{tissue}_{rep}_{type}'
+    conda:
+        '../Envs/chromHMM.yaml'
     threads: 12
     shell:
-        'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar BinarizeBed {input.chroms} . {input.marks} {output}'
+        'ChromHMM.sh BinarizeBed {input.chroms} . {input.marks} {output}'
         
 rule learn_model:
     input:
@@ -239,9 +243,11 @@ rule learn_model:
         emissions = 'ChromHMM/Model_{tissue}_{type}_{states}/emissions_{states}.txt'
     params:
         outdir = 'ChromHMM/Model_{tissue}_{type}_{states}'
+    conda:
+        '../Envs/chromHMM.yaml'
     threads: 12
     shell:
-        'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar LearnModel -printposterior -p {threads} -l {input.chroms} {input.bindir} {params.outdir} {wildcards.states} {config[ChromHMM_genome]}'
+        'ChromHMM.sh LearnModel -printposterior -p {threads} -l {input.chroms} {input.bindir} {params.outdir} {wildcards.states} {config[ChromHMM_genome]}'
         
 rule replicate_segmentation:
     input:
@@ -252,9 +258,11 @@ rule replicate_segmentation:
         modeldir = 'ChromHMM/Model_Joint_{type}_{states}'
     output:
         'ChromHMM/Model_Joint_{type}_{states}/{tissue}_{rep}_{states}_segments.bed'
+    conda:
+        '../Envs/chromHMM.yaml'
     threads: 12
     shell:
-        'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar MakeSegmentation -printposterior {input.model} {input.bindir} {input.modeldir}'
+        'ChromHMM.sh MakeSegmentation -printposterior {input.model} {input.bindir} {input.modeldir}'
         
 
 rule split_states:
@@ -292,6 +300,8 @@ rule tissue_specific_state_alternate:
         others = tissue_specific_inputs
     output:
         '{model}/{prefix}_Specific_{state}-{more}.bed'
+    conda:
+        '../Envs/bedtools.yaml'
     shell:
         'bedtools intersect -a {input.specific} -b {input.others} -v > {output}'
         
@@ -301,6 +311,8 @@ rule get_segment_seqs:
         genome = lambda wildcards: genomes['{}'.format(wildcards.spec)]
     output:
         '{model}/{spec}_{suffix}.fa'
+    conda:
+        '../Envs/bedtools.yaml'
     shell:
         'bedtools getfasta -fi {input.genome} -bed {input.bed} > {output}'
 
@@ -327,8 +339,10 @@ rule test_num_states:
         txt = 'ChromHMM/Correlation_Tests/{type}_{states}_Comparison.txt'
     params:
         prefix = 'ChromHMM/Correlation_Tests/{type}_{states}_Comparison'
+    conda:
+        '../Envs/chromHMM.yaml'
     shell:
-        'java -mx10000M -jar /home/ckern/ChromHMM/ChromHMM.jar CompareModels {input.testmodel} {input.tissuemodels} {params.prefix}'
+        'ChromHMM.sh CompareModels {input.testmodel} {input.tissuemodels} {params.prefix}'
 
 rule pairwise_overlap:
     input:
@@ -504,6 +518,8 @@ rule assign_states_to_tss:
         overlap = 'ChromHMM/Model_{scope}_{type}_{states}/{tissue}_TSS_states.txt'
     params:
         segments = lambda wildcards: 'ChromHMM/Model_{scope}_{type}_{states}/{tissue}_{states}_dense.bed'.format(type=wildcards.type, scope=wildcards.scope, states=wildcards.states, tissue=wildcards.tissue)
+    conda:
+        '../Envs/bedtools.yaml'
     shell:
         'bedtools intersect -a {input.tss} -b {params.segments} -wa -wb > {output.overlap}'
 
