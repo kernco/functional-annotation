@@ -323,6 +323,9 @@ rule spp_stats:
     conda:
         '../Envs/r.yaml'
     shell: 
+        # NOTE: It looks like run_spp.R is not included in this repository
+        # I am not sure if this rule is actually used anywhere in the workflow
+        # since I have not currently run it but if it is this would break -ETH
         'Rscript /home/ckern/phantompeakqualtools/run_spp.R -c={input} -rf -out={output.stats} -p={threads} -s=0:2:400 -savp={output.figure} -tmpdir={config[tempdir]}'
 
 ############################
