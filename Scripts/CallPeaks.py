@@ -38,10 +38,10 @@ peaktype = peak_type(snakemake.wildcards.library)
 command = ['macs2', 'callpeak', '-t'] +snakemake.input.chip
 if hasattr(snakemake.input, 'control'):
     command += ['-c', snakemake.input.control]
-if snakemake.wildcards.library.startswith('DNase') or snakemake.wildcards.library.startswith('ATAC'):
-    command += ['-f', 'BAM']
-else:
-    command += ['-f', 'BED']
+#if snakemake.wildcards.library.startswith('DNase') or snakemake.wildcards.library.startswith('ATAC'):
+command += ['-f', 'BAM']
+#else:
+#    command += ['-f', 'BED']
 command += ['-n', 'Macs2/{}'.format(snakemake.wildcards.library), '-g', snakemake.config["genomesize"], '--keep-dup', 'all', '--extsize', '200', '-B', '--SPMR']
 if snakemake.wildcards.library.startswith('ATAC'):
     command += ['--nomodel', '--shift', '-100']
