@@ -3,10 +3,10 @@
 
 def peak_call_inputs(wildcards):
     assay, tissue, rep = wildcards.library.split('_')
-    if assay == 'DNaseSeq' or assay == 'ATAC':
-        suffix = 'bam'
-    else:
-        suffix = 'tagAlign.gz'
+    #if assay == 'DNaseSeq' or assay == 'ATAC':
+    suffix = 'bam'
+    #else:
+    #suffix = 'tagAlign.gz'
     if rep == 'Merged':
         inputs = {'chip': ['Aligned_Reads/{}.{}'.format(x, suffix) for x in libraries(assay=assay, tissue=tissue)]}
     else:
