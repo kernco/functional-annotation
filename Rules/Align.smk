@@ -322,8 +322,8 @@ rule spp_stats:
     threads: 24
     conda:
         '../Envs/r.yaml'
-    shell: 
-        'Rscript /home/ckern/phantompeakqualtools/run_spp.R -c={input} -rf -out={output.stats} -p={threads} -s=0:2:400 -savp={output.figure} -tmpdir={config[tempdir]}'
+    shell:
+        'Rscript ../Scripts/run_spp.R -c={input} -rf -out={output.stats} -p={threads} -s=0:2:400 -savp={output.figure} -tmpdir={config[tempdir]}'
 
 ############################
 # Get alignment statistics #

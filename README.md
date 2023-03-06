@@ -39,13 +39,16 @@ The pipeline can be run with this command in your working directory:
 
 `snakemake -j 4 -s /path/to/pipeline/Snakefile --configfile config.yaml --use-conda`
 
-The -j arugment specifies how many tasks to run in parallel. The -s argument should be
+The -j argument specifies how many tasks to run in parallel. The -s argument should be
 the path to where the Snakefile file of the pipeline is on your system.
 
 If you are running the pipeline on a computing cluster, you can use the run.sh script
 included with the pipeline:
 
 `/path/to/pipeline/run.sh`
+
+Make sure to change the `--cluster-config` argument in this script
+to the path of `cluster.yaml` on your machine.
 
 This is configured for a cluster using the SLURM job scheduler. If your cluster uses
 another job scheduler you will need to modify this script. The script itself can be

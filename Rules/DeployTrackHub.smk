@@ -7,7 +7,7 @@ rule Trim_Bedgraph:
     conda:
         '../Envs/bdg2bw.yaml'
     shell:
-        'bedtools slop -i {input.bdg} -g {input.chromsizes} -b 0 | /home/ckern/bin/bedClip stdin {input.chromsizes} {output}'
+        'bedtools slop -i {input.bdg} -g {input.chromsizes} -b 0 | bedClip stdin {input.chromsizes} {output}'
 
 rule FoldEnrichment_BigWig:
     input:
@@ -76,8 +76,10 @@ rule NarrowPeak_BigBed:
         chromsizes = config['chromsizes']
     output:
         'Track_Hub/{assay}_{tissue}_Combined_Peaks.bigBed'
+    conda:
+        '../Env/bdg2bw.yaml'
     shell:
-        '/home/ckern/bin/bedToBigBed -type=bed4+1 {input} {output}'
+        'bedToBigBed -type=bed4+1 {input} {output}'
 
 rule BroadPeak_BigBed:
     input:
@@ -85,8 +87,10 @@ rule BroadPeak_BigBed:
         chromsizes = config['chromsizes']
     output:
         'Track_Hub/{assay}_{tissue}_Broad.bigBed'
+    conda:
+        '../Env/bdg2bw.yaml'
     shell:
-        '/home/ckern/bin/bedToBigBed -type=bed4+5 {input} {output}'
+        'bedToBigBed -type=bed4+5 {input} {output}'
 
 rule Temp_Peak_File:
     input:
@@ -98,7 +102,7 @@ rule Temp_Peak_File:
         '../Envs/bdg2bw.yaml'
     shell:
         'grep -v chrM {input.peaks} | cut -f1,2,3,4 > {input.peaks}.temp &&'
-        'bedtools slop -i {input.peaks}.temp -g {input.chromsizes} -b 0 | /home/ckern/bin/bedClip stdin {input.chromsizes} {output} &&'
+        'bedtools slop -i {input.peaks}.temp -g {input.chromsizes} -b 0 | bedClip stdin {input.chromsizes} {output} &&'
         'rm {input.peaks}.temp'
 
 rule RepPeak_BigBed:
@@ -107,8 +111,10 @@ rule RepPeak_BigBed:
         chromsizes = config['chromsizes']
     output:
         'Track_Hub/{library}_Peaks.bigBed'
+    conda:
+        '../Env/bdg2bw.yaml'
     shell:
-        '/home/ckern/bin/bedToBigBed -type=bed4 {input} {output}'
+        'bedToBigBed -type=bed4 {input} {output}'
 
 rule Segmentation_Dense_BigBed:
     input:
